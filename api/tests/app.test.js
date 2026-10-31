@@ -98,6 +98,21 @@ describe('catalog routes', () => {
     ]);
   });
 
+  test('searches inside syllabi', async () => {
+    const deps = fakes();
+    deps.search = { search: jest.fn().mockResolvedValue([{ fileId: FILE_ID, codes: ['CS310'], snippet: 'uses Java' }]) };
+    const res = await createApp(deps)(event('GET', '/api/search', { query: { q: ' java ' } }));
+    expect(res.statusCode).toBe(200);
+    expect(deps.search.search).toHaveBeenCalledWith('java');
+    expect(parse(res).results).toHaveLength(1);
+  });
+
+  test('rejects searches that are too short or too long', async () => {
+    const app = createApp({ ...fakes(), search: { search: jest.fn() } });
+    expect((await app(event('GET', '/api/search', { query: { q: 'a' } }))).statusCode).toBe(400);
+    expect((await app(event('GET', '/api/search', { query: { q: 'x'.repeat(101) } }))).statusCode).toBe(400);
+  });
+
   test('serves a syllabus file as base64', async () => {
     const res = await createApp(fakes())(event('GET', `/api/syllabi/${FILE_ID}`));
     expect(res.statusCode).toBe(200);

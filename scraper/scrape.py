@@ -3,6 +3,7 @@
     python scrape.py --since "Fall 2022"            # live site + Internet Archive
     python scrape.py --dry-run                      # parse only, write nothing
     python scrape.py --html tests/fixtures/x.html   # parse saved pages instead of fetching the index
+    python scrape.py --index-only                   # just make saved files searchable
 
 Two passes:
   1. Listing pages (live or archived): course, section, title and instructor come from the table.
@@ -110,9 +111,12 @@ def main(argv=None):
     parser.add_argument("--html", nargs="*", help="Parse saved listing pages instead of fetching the index")
     parser.add_argument("--no-filenames", action="store_true", help="Skip the pass that guesses details from file names")
     parser.add_argument("--delay", type=float, default=1.0, help="Seconds between requests")
+    parser.add_argument("--index-only", action="store_true", help="Skip scraping; only make saved files searchable")
+    parser.add_argument("--reindex", action="store_true", help="Re-extract text for every file, not just new ones")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.getLogger("pypdf").setLevel(logging.ERROR)  # it warns about every slightly malformed PDF
     load_dotenv()
     since = parse_term(args.since)
     if not since:
@@ -156,8 +160,11 @@ def main(argv=None):
             if not handle(timestamp, row):
                 return
 
-    run()
-    log.info("Done: %d rows, %d new files, %d skipped", counts["rows"], counts["saved"], counts["skipped"])
+    if not args.index_only:
+        run()
+        log.info("Done: %d rows, %d new files, %d skipped", counts["rows"], counts["saved"], counts["skipped"])
+    if store:
+        log.info("Made %d syllabi searchable", store.index_text(reindex=args.reindex))
     return 0
 
 

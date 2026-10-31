@@ -1,6 +1,6 @@
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Autocomplete, Box, Card, CardActionArea, Grid, Skeleton, TextField, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, Card, CardActionArea, Grid, Link, Skeleton, TextField, Typography } from '@mui/material';
 import { api } from '../api';
 
 export default function Home() {
@@ -31,8 +31,14 @@ export default function Home() {
         renderInput={(params) => (
           <TextField {...params} autoFocus label="Course code or name" placeholder="CS 310 or Data Structures" />
         )}
-        sx={{ mb: 5 }}
+        sx={{ mb: 1.5 }}
       />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 5, textAlign: 'center' }}>
+        Looking for a language, textbook or policy?{' '}
+        <Link component={RouterLink} to="/search">
+          Search inside syllabi
+        </Link>
+      </Typography>
 
       {error && <Alert severity="error">Couldn&apos;t load courses: {error.message}</Alert>}
 

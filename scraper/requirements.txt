@@ -1,5 +1,6 @@
 beautifulsoup4==4.13.4
 boto3==1.38.36
 pymongo==4.13.2
+pypdf==6.21.4
 python-dotenv==1.1.0
 requests==2.32.4

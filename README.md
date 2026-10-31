@@ -1,6 +1,11 @@
 # GMU Syllabus Searcher
 
-Look up a GMU Computer Science course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed. Students can upload missing syllabi, and an admin approves them before they show up.
+Look up a GMU Computer Science course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed.
+
+- **By course**: search a code or title, then filter by term and professor.
+- **By professor**: every course and term a professor has a syllabus for.
+- **Inside syllabi**: full-text search for a language, textbook or policy (`Python`, `"late policy"`), with highlighted snippets.
+- **Uploads**: students can add missing syllabi; an admin approves them before they show up.
 
 ## How it fits together
 
@@ -9,7 +14,7 @@ Look up a GMU Computer Science course, see which professors taught it each term 
 | Website | React, Vite, MUI, React Query | nginx container | S3 + CloudFront Free plan |
 | API | Node.js Lambda handler | Node container (`scripts/local.js`) | AWS Lambda behind CloudFront |
 | Course catalog | DynamoDB single table | DynamoDB Local container | DynamoDB, provisioned 5/5 |
-| Syllabus files | MongoDB GridFS | Mongo container | MongoDB Atlas M0 |
+| Syllabus files + text search | MongoDB GridFS + text index | Mongo container | MongoDB Atlas M0 |
 | Upload queue + admin login | Supabase Postgres + Auth | Supabase free tier (cloud) | Supabase free tier |
 | PDF reading (optional) | Azure AI Document Intelligence | Azure F0 (cloud) | Azure F0 |
 | Scraper | Python | One-off container | GitHub Actions schedule |

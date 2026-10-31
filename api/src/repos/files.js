@@ -85,4 +85,4 @@ function createFiles({ db } = {}) {
   };
 }
 
-module.exports = { createFiles };
+module.exports = { createFiles, getDb };

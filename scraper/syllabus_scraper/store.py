@@ -1,13 +1,22 @@
 """Writes scraped syllabi to the same stores the API reads:
-files -> MongoDB GridFS bucket "syllabi", catalog -> DynamoDB (layout in api/src/repos/catalog.js).
+files -> MongoDB GridFS bucket "syllabi", catalog -> DynamoDB (layout in api/src/repos/catalog.js),
+searchable text -> MongoDB collection "syllabus_text" (read by api/src/repos/search.js).
 """
 
+import logging
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 
 import boto3
 import gridfs
+from boto3.dynamodb.conditions import Attr
+from bson import ObjectId
 from pymongo import MongoClient
+
+from .text import extract_text
+
+log = logging.getLogger("scraper")
 
 
 def detect_content_type(data, url):
@@ -69,3 +78,52 @@ class Store:
                     "createdAt": now,
                 }
             )
+
+    def offerings_by_file(self):
+        """Every offering in DynamoDB, grouped by the file it points to."""
+        by_file = defaultdict(list)
+        kwargs = {"FilterExpression": Attr("SK").begins_with("TERM#")}
+        while True:
+            page = self.table.scan(**kwargs)
+            for item in page["Items"]:
+                by_file[item["fileId"]].append(item)
+            if "LastEvaluatedKey" not in page:
+                return by_file
+            kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+    def index_text(self, reindex=False):
+        """Extracts text from every syllabus file that isn't searchable yet.
+        Also picks up uploads approved since the last run. Returns how many were indexed."""
+        collection = self.db["syllabus_text"]
+        collection.create_index([("codes", "text"), ("title", "text"), ("text", "text")],
+                                weights={"codes": 10, "title": 5, "text": 1}, name="search")
+        done = set() if reindex else {doc["_id"] for doc in collection.find({}, {"_id": 1})}
+
+        count = 0
+        for file_id, offerings in self.offerings_by_file().items():
+            if file_id in done:
+                continue
+            try:
+                stream = self.bucket.open_download_stream(ObjectId(file_id))
+            except gridfs.errors.NoFile:
+                continue
+            text = extract_text(stream.read(), stream.metadata.get("contentType", ""))
+            first = offerings[0]
+            collection.replace_one(
+                {"_id": file_id},
+                {
+                    "codes": sorted({o["code"] for o in offerings}),
+                    "title": first["title"],
+                    "termKey": first["termKey"],
+                    "termLabel": first["termLabel"],
+                    "section": first["section"],
+                    "instructors": list(dict.fromkeys(n for o in offerings for n in o["instructors"])),
+                    "source": first["source"],
+                    "text": text,
+                },
+                upsert=True,
+            )
+            count += 1
+            if not text:
+                log.warning("No text in %s (likely a scanned PDF)", file_id)
+        return count

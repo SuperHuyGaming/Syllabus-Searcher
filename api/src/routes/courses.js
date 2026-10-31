@@ -13,7 +13,17 @@ const HTML_SANDBOX = {
   'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src * data:",
 };
 
-module.exports = ({ catalog, files }) => [
+module.exports = ({ catalog, files, search }) => [
+  {
+    method: 'GET',
+    path: /^\/api\/search$/,
+    async handler({ query }) {
+      const q = String(query.q || '').trim();
+      if (q.length < 2) throw new HttpError(400, 'Type at least 2 characters');
+      if (q.length > 100) throw new HttpError(400, 'Search is limited to 100 characters');
+      return json(200, { query: q, results: await search.search(q) }, CATALOG_CACHE);
+    },
+  },
   {
     method: 'GET',
     path: /^\/api\/courses$/,

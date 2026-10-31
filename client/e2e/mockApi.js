@@ -57,6 +57,23 @@ export async function mockApi(page, { onUpload } = {}) {
     if (path === '/api/courses/CS310') return route.fulfill(json(cs310));
     if (path.startsWith('/api/courses/')) return route.fulfill(json({ error: 'No syllabi found for CS999' }, 404));
     if (path === '/api/professors') return route.fulfill(json({ professors }));
+    if (path === '/api/search') {
+      const q = url.searchParams.get('q');
+      const results = /python/i.test(q)
+        ? [
+            {
+              fileId: FILE_A,
+              codes: ['CS310'],
+              title: 'Data Structures',
+              termLabel: 'Fall 2024',
+              section: '001',
+              instructors: ['Russell, K'],
+              snippet: '…All assignments are written in Python and submitted on Gradescope…',
+            },
+          ]
+        : [];
+      return route.fulfill(json({ query: q, results }));
+    }
     if (path === '/api/uploads' && route.request().method() === 'POST') {
       onUpload?.(url.searchParams, route.request());
       return route.fulfill(json({ id: 'x', status: 'pending' }, 201));
