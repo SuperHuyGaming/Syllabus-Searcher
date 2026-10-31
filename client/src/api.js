@@ -21,6 +21,7 @@ export const syllabusUrl = (fileId) => `/api/syllabi/${fileId}`;
 export const api = {
   courses: () => json('/courses?dept=CS'),
   course: (code) => json(`/courses/${encodeURIComponent(code)}`),
+  professors: () => json('/professors'),
 
   upload: ({ course, term, section, instructor, file }) => {
     const query = new URLSearchParams({ course, term, section, instructor });

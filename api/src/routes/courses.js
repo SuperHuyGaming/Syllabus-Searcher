@@ -1,6 +1,7 @@
 const config = require('../config');
 const { json, binary, HttpError } = require('../lib/http');
 const { normalizeCourse } = require('../lib/terms');
+const { groupByProfessor } = require('../lib/professors');
 
 // Course data changes only when the scraper runs or an upload is approved,
 // so CloudFront can cache it for a while and Lambda rarely runs.
@@ -33,6 +34,14 @@ module.exports = ({ catalog, files }) => [
       const course = await catalog.getCourse(code);
       if (!course) throw new HttpError(404, `No syllabi found for ${code}`);
       return json(200, course, CATALOG_CACHE);
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/api\/professors$/,
+    async handler() {
+      const professors = groupByProfessor(await catalog.listOfferings());
+      return json(200, { professors }, CATALOG_CACHE);
     },
   },
   {

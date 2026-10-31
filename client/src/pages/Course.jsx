@@ -8,6 +8,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Link,
   MenuItem,
   Skeleton,
   Stack,
@@ -18,8 +19,10 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { api, syllabusUrl } from '../api';
 import { groupByTerm, instructorsOf } from '../lib/terms';
+import { professorSlug } from '../lib/professors';
 
 const ALL = 'all';
+const PLACEHOLDER = /^(staff|all|all instructors|all professors|tba)$/i;
 
 export default function Course() {
   const { code } = useParams();
@@ -100,7 +103,20 @@ export default function Course() {
                     sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', '&:last-child': { pb: 2 } }}
                   >
                     <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontWeight: 600 }}>{o.instructors.join(', ')}</Typography>
+                      <Typography sx={{ fontWeight: 600 }}>
+                        {o.instructors.map((name, i) => (
+                          <span key={name}>
+                            {i > 0 && '; '}
+                            {PLACEHOLDER.test(name) ? (
+                              name
+                            ) : (
+                              <Link component={RouterLink} to={`/professors/${professorSlug(name)}`} color="inherit">
+                                {name}
+                              </Link>
+                            )}
+                          </span>
+                        ))}
+                      </Typography>
                       <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
                         <Chip size="small" label={`Section ${o.section}`} />
                         {o.source === 'upload' && <Chip size="small" color="secondary" label="Student upload" />}

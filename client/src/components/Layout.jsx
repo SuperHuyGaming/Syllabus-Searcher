@@ -12,12 +12,29 @@ export default function Layout() {
             component={RouterLink}
             to="/"
             variant="h6"
-            sx={{ flexGrow: 1, color: 'inherit', textDecoration: 'none', fontWeight: 700 }}
+            noWrap
+            sx={{ flexGrow: 1, color: 'inherit', textDecoration: 'none', fontWeight: 700, fontSize: { xs: 16, sm: 20 } }}
           >
-            GMU Syllabus Searcher
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              GMU{' '}
+            </Box>
+            Syllabus Searcher
           </Typography>
-          <Button component={RouterLink} to="/upload" color="secondary" variant="contained" disableElevation>
-            Upload a syllabus
+          <Button component={RouterLink} to="/professors" color="inherit">
+            Professors
+          </Button>
+          <Button
+            component={RouterLink}
+            to="/upload"
+            color="secondary"
+            variant="contained"
+            disableElevation
+            sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Upload
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              &nbsp;a syllabus
+            </Box>
           </Button>
         </Toolbar>
       </AppBar>

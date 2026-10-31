@@ -76,7 +76,7 @@ def parse_instructors(text):
 FILE_COURSE = re.compile(
     r"^(?:(?P<dept>[A-Z]{2,4})[ _]?)?(?P<num>\d{3})(?:/\d{3}|_[A-Z]{2,4}_\d{3})?(?P<rest>.*)$"
 )
-FILE_REST = re.compile(r"^(?P<names>[A-Za-z'_.-]*?)(?P<section>(?:\d{3}|DL\d|H\d{2}).*|All_Sections|All|ALL)?$")
+FILE_REST = re.compile(r"^(?P<names>[A-Za-z'_.-]*?)(?P<section>(?:\d{3}|DL\d|H\d{2}).*|(?i:all(?:_sections)?))?$")
 
 
 def _file_instructors(names):

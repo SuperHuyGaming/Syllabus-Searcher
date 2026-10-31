@@ -77,6 +77,7 @@ SPRING_2023 = Term("Spring", 2023)
         ("CS_100Gonzalez_HernandezA002.pdf", "CS100", "002", ["Gonzalez Hernandez, A"]),
         ("CS_112AllAll_Sections.pdf", "CS112", "All", ["All instructors"]),
         ("CS_211Destine_DimitriadisAll.html", "CS211", "All", ["Destine", "Dimitriadis"]),
+        ("310Dimitriadis_ZhongAll_sections.html", "CS310", "All", ["Dimitriadis", "Zhong"]),
         ("CS_321PettitR002_006.pdf", "CS321", "002, 006", ["Pettit, R"]),
         ("CS_795Johnson-MatthewsB.pdf", "CS795", "N/A", ["Johnson-Matthews, B"]),
         ("CS555ShamseddineMCS-555-004_CS-555-DL1.pdf", "CS555", "004, DL1", ["Shamseddine, M"]),

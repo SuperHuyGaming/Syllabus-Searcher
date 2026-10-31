@@ -7,6 +7,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient,
   QueryCommand,
+  ScanCommand,
   BatchWriteCommand,
   UpdateCommand,
   GetCommand,
@@ -22,16 +23,17 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       { marshallOptions: { removeUndefinedValues: true } }
     );
 
-  async function queryAll(params) {
+  async function readAll(Command, params) {
     const items = [];
     let ExclusiveStartKey;
     do {
-      const page = await db.send(new QueryCommand({ TableName: tableName, ...params, ExclusiveStartKey }));
+      const page = await db.send(new Command({ TableName: tableName, ...params, ExclusiveStartKey }));
       items.push(...(page.Items || []));
       ExclusiveStartKey = page.LastEvaluatedKey;
     } while (ExclusiveStartKey);
     return items;
   }
+  const queryAll = (params) => readAll(QueryCommand, params);
 
   return {
     async listCourses(dept) {
@@ -63,6 +65,18 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
           source,
         }));
       return { code, display: displayCourse(code), title: meta.title, offerings };
+    },
+
+    // Every offering in the table, for the professor pages. A scan is fine at one
+    // department's size (a few hundred items), and CloudFront caches the result.
+    async listOfferings() {
+      const items = await readAll(ScanCommand, {
+        FilterExpression: 'begins_with(SK, :term)',
+        ExpressionAttributeValues: { ':term': 'TERM#' },
+        ProjectionExpression: 'code, title, termKey, termLabel, #section, instructors, fileId, #source',
+        ExpressionAttributeNames: { '#section': 'section', '#source': 'source' },
+      });
+      return items.map((item) => ({ ...item, display: displayCourse(item.code) }));
     },
 
     async getCourseMeta(code) {

@@ -86,6 +86,18 @@ describe('catalog routes', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  test('lists professors with their courses', async () => {
+    const deps = fakes();
+    deps.catalog.listOfferings = jest.fn().mockResolvedValue([
+      { code: 'CS310', termKey: '2024-3', section: '001', instructors: ['Ada Lovelace'], fileId: FILE_ID },
+    ]);
+    const res = await createApp(deps)(event('GET', '/api/professors'));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res).professors).toEqual([
+      expect.objectContaining({ name: 'Ada Lovelace', slug: 'ada-lovelace', courses: ['CS310'] }),
+    ]);
+  });
+
   test('serves a syllabus file as base64', async () => {
     const res = await createApp(fakes())(event('GET', `/api/syllabi/${FILE_ID}`));
     expect(res.statusCode).toBe(200);

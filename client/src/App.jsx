@@ -4,6 +4,8 @@ import Layout from './components/Layout';
 import Home from './pages/Home';
 import Course from './pages/Course';
 import Upload from './pages/Upload';
+import Professors from './pages/Professors';
+import Professor from './pages/Professor';
 import NotFound from './pages/NotFound';
 
 // Only admins load the Supabase auth code.
@@ -16,6 +18,8 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="courses/:code" element={<Course />} />
+          <Route path="professors" element={<Professors />} />
+          <Route path="professors/:slug" element={<Professor />} />
           <Route path="upload" element={<Upload />} />
           <Route path="admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
