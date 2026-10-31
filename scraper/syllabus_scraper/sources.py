@@ -6,6 +6,7 @@
 """
 
 import time
+from urllib.parse import unquote, urlsplit
 
 import requests
 
@@ -60,6 +61,30 @@ def archived_index_pages(fetcher, since_year):
         page = fetcher.get(wayback_url(timestamp, f"{SITE}{INDEX_PATH}"))
         if page:
             yield timestamp, page.text
+
+
+def archived_files(fetcher, term, retries=3):
+    """Lists (timestamp, path) for every archived file in /media/syllabi/<Term>/.
+    Used for terms whose listing page was never captured."""
+    params = {
+        "url": f"cs.gmu.edu/media/syllabi/{term.season}{term.year}/*",
+        "output": "json",
+        "fl": "timestamp,original",
+        "filter": "statuscode:200",
+        "collapse": "urlkey",
+    }
+    url = requests.Request("GET", CDX, params=params).prepare().url
+    for attempt in range(retries):
+        res = fetcher.get(url)
+        try:
+            rows = res.json()[1:] if res else []
+            break
+        except ValueError:
+            # The archive sometimes answers with an HTML "try again later" page.
+            time.sleep(fetcher.delay * 10 * (attempt + 1))
+    else:
+        return []
+    return [(timestamp, unquote(urlsplit(original).path)) for timestamp, original in rows]
 
 
 def live_index_page(fetcher, url=f"{SITE}{INDEX_PATH}"):

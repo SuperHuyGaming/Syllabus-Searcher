@@ -1,0 +1,16 @@
+# Supabase pauses free projects after a week without activity. Hitting /api/health
+# touches Supabase, MongoDB Atlas and DynamoDB every few days so nothing goes to sleep.
+# Set the repo variable SITE_URL (e.g. https://d123.cloudfront.net) to turn it on.
+name: Keep alive
+
+on:
+  schedule:
+    - cron: '0 12 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    if: vars.SITE_URL != ''
+    steps:
+      - run: curl --fail --silent --show-error --retry 3 "${{ vars.SITE_URL }}/api/health"

@@ -104,6 +104,9 @@ export default function Course() {
                       <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
                         <Chip size="small" label={`Section ${o.section}`} />
                         {o.source === 'upload' && <Chip size="small" color="secondary" label="Student upload" />}
+                        {o.source === 'gmu-cs-filename' && (
+                          <Chip size="small" variant="outlined" label="Details from file name" />
+                        )}
                       </Stack>
                     </Box>
                     <Button

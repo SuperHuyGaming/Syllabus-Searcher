@@ -1,0 +1,82 @@
+# Deploys to AWS: Lambda API + DynamoDB + CloudFront (infra/template.yaml), then the website to S3.
+# Run it from the Actions tab ("Run workflow"). Needs the repo secrets listed in docs/DEPLOY.md.
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - uses: aws-actions/setup-sam@v3
+        with:
+          use-installer: true
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy API, database and CloudFront
+        working-directory: infra
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+          AZURE_DI_ENDPOINT: ${{ secrets.AZURE_DI_ENDPOINT }}
+          AZURE_DI_KEY: ${{ secrets.AZURE_DI_KEY }}
+          ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
+          IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
+        run: |
+          sam build
+          sam deploy --no-progressbar --parameter-overrides \
+            "MongoDbUri=$MONGODB_URI" \
+            "SupabaseUrl=$SUPABASE_URL" \
+            "SupabaseServiceRoleKey=$SUPABASE_SERVICE_ROLE_KEY" \
+            "AdminEmails=$ADMIN_EMAILS" \
+            "AzureDiEndpoint=$AZURE_DI_ENDPOINT" \
+            "AzureDiKey=$AZURE_DI_KEY" \
+            "OriginSecret=$ORIGIN_SECRET" \
+            "IpHashSalt=$IP_HASH_SALT" \
+            "ReservedConcurrency=${{ vars.RESERVED_CONCURRENCY || 0 }}"
+
+      - name: Read stack outputs
+        id: stack
+        run: |
+          out() { aws cloudformation describe-stacks --stack-name syllabus-searcher \
+            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          echo "bucket=$(out SiteBucketName)" >> "$GITHUB_OUTPUT"
+          echo "distribution=$(out DistributionId)" >> "$GITHUB_OUTPUT"
+          echo "url=$(out SiteUrl)" >> "$GITHUB_OUTPUT"
+
+      - name: Build website
+        working-directory: client
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload website
+        working-directory: client/dist
+        run: |
+          # Hashed assets never change; index.html must always be re-checked.
+          aws s3 sync . "s3://${{ steps.stack.outputs.bucket }}" --delete \
+            --exclude index.html --cache-control "public, max-age=31536000, immutable"
+          aws s3 cp index.html "s3://${{ steps.stack.outputs.bucket }}/index.html" \
+            --cache-control "no-cache"
+          aws cloudfront create-invalidation --distribution-id "${{ steps.stack.outputs.distribution }}" \
+            --paths "/index.html" > /dev/null
+
+      - run: echo "Deployed to ${{ steps.stack.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"

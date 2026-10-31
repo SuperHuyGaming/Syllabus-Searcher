@@ -1,0 +1,260 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  GMU Syllabus Searcher. Everything here is chosen to stay inside AWS's always-free
+  limits: no EC2/NAT/public IPs, DynamoDB provisioned at 5/5 (free tier is 25/25),
+  Lambda (1M free requests/month) behind CloudFront, which caches most API responses.
+  After the first deploy, switch the CloudFront distribution to the Free flat-rate
+  plan in the console (no overage charges).
+
+Parameters:
+  MongoDbUri:
+    Type: String
+    NoEcho: true
+    Description: MongoDB Atlas M0 connection string (syllabus files in GridFS)
+  MongoDbName:
+    Type: String
+    Default: syllabus_searcher
+  SupabaseUrl:
+    Type: String
+    Default: ''
+  SupabaseServiceRoleKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+  AdminEmails:
+    Type: String
+    Default: ''
+    Description: Comma-separated emails allowed to approve uploads
+  AzureDiEndpoint:
+    Type: String
+    Default: ''
+  AzureDiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+  OriginSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 20
+    Description: Random string CloudFront sends so the Lambda URL can't be called directly
+  IpHashSalt:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+  ReservedConcurrency:
+    Type: Number
+    Default: 0
+    Description: >
+      Caps how many copies of the API can run at once. 0 leaves it unset; new AWS
+      accounts often have a total limit of 10 and can't reserve any until AWS raises it.
+
+Conditions:
+  HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
+
+Resources:
+  # ---------- Course catalog ----------
+  CatalogTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-catalog
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+      # Provisioned, not on-demand: at the limit requests slow down instead of costing money.
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  # ---------- API ----------
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-api
+      CodeUri: ../api
+      Handler: src/handler.handler
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 20
+      ReservedConcurrentExecutions: !If [HasReservedConcurrency, !Ref ReservedConcurrency, !Ref AWS::NoValue]
+      LoggingConfig:
+        LogGroup: !Ref ApiLogs
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CatalogTable
+          MONGODB_URI: !Ref MongoDbUri
+          MONGODB_DB: !Ref MongoDbName
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceRoleKey
+          ADMIN_EMAILS: !Ref AdminEmails
+          AZURE_DI_ENDPOINT: !Ref AzureDiEndpoint
+          AZURE_DI_KEY: !Ref AzureDiKey
+          ORIGIN_SECRET: !Ref OriginSecret
+          IP_HASH_SALT: !Ref IpHashSalt
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CatalogTable
+      FunctionUrlConfig:
+        AuthType: NONE
+
+  # Function URLs need both permissions to be callable; SAM only adds InvokeFunctionUrl.
+  ApiFunctionUrlInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      Principal: '*'
+      InvokedViaFunctionUrl: true
+
+  # Keep logs a week so they stay well under the 5 GB free tier.
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-api
+      RetentionInDays: 7
+
+  # ---------- Website ----------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Only this CloudFront distribution can read the bucket.
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub ${SiteBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  SiteOriginAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-site
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # Single-page app: paths without a file extension load index.html.
+  # A CloudFront Function (included in the flat-rate plans), not error pages,
+  # so real 404s from /api/* still reach the browser.
+  SpaRewrite:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${AWS::StackName}-spa-rewrite
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Serve index.html for client-side routes
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          if (request.uri.indexOf('.') === -1) request.uri = '/index.html';
+          return request;
+        }
+
+  # API caching follows the Cache-Control headers the API sends (no-store for admin routes).
+  # Authorization is part of the key so signed-in admin requests never share a cache entry.
+  ApiCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub ${AWS::StackName}-api
+        MinTTL: 0
+        DefaultTTL: 0
+        MaxTTL: 31536000
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          HeadersConfig:
+            HeaderBehavior: whitelist
+            Headers: [Authorization]
+          QueryStringsConfig:
+            QueryStringBehavior: all
+          CookiesConfig:
+            CookieBehavior: none
+
+  # Forwards the visitor IP (for upload rate limits) but not Host, which Lambda URLs reject.
+  ApiOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub ${AWS::StackName}-api
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers: [CloudFront-Viewer-Address, Content-Type]
+        QueryStringsConfig:
+          QueryStringBehavior: all
+        CookiesConfig:
+          CookieBehavior: none
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: GMU Syllabus Searcher
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOriginAccess.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+          - Id: api
+            # FunctionUrl looks like https://<id>.lambda-url.<region>.on.aws/
+            DomainName: !Select [2, !Split ['/', !GetAtt ApiFunctionUrl.FunctionUrl]]
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+            OriginCustomHeaders:
+              - HeaderName: X-Origin-Secret
+                HeaderValue: !Ref OriginSecret
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SpaRewrite.FunctionMetadata.FunctionARN
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            Compress: true
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: !Ref ApiCachePolicy
+            OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
+
+Outputs:
+  SiteUrl:
+    Value: !Sub https://${Distribution.DomainName}
+  DistributionId:
+    Value: !Ref Distribution
+  SiteBucketName:
+    Value: !Ref SiteBucket
+  TableName:
+    Value: !Ref CatalogTable

@@ -24,7 +24,9 @@ browser ──> nginx / CloudFront ──> /            static React build
 
 ## Run it locally with Docker
 
-Needs Docker Desktop running.
+Needs Docker Desktop. On Windows the quickest way is `.\start.ps1`, which starts Docker, starts the app, loads syllabi on the first run and opens the browser. [docs/RUN_ON_YOUR_PC.md](docs/RUN_ON_YOUR_PC.md) explains each piece and covers troubleshooting.
+
+Or by hand:
 
 ```bash
 cp .env.example .env              # optional: add Supabase/Azure keys for uploads and /admin
@@ -67,7 +69,9 @@ What the archive has, as of October 2026:
 - Listing pages for Fall 2022, Spring 2024, Fall 2024, Spring 2025, Summer 2025 and Fall 2025. Spring 2023 and Fall 2023 listings weren't captured.
 - Files for most terms from Fall 2022 to Spring 2025. Fall 2025 files weren't captured, so those rows get skipped.
 
-Student uploads fill the gaps. If GMU posts syllabi somewhere new, add that page to `scraper/syllabus_scraper/sources.py`.
+For files no surviving listing page mentions (all of 2023, and some of Fall 2024), a second pass guesses the course, professor and section from the file name, e.g. `CS_321PettitR002_006.pdf` → CS 321, Pettit, R, sections 002 and 006. These show a "Details from file name" tag on the site.
+
+Student uploads fill the remaining gaps. If GMU posts syllabi somewhere new, add that page to `scraper/syllabus_scraper/sources.py`.
 
 ## Development without Docker
 
@@ -81,6 +85,10 @@ cd scraper && python -m venv .venv && .venv/Scripts/pip install -r requirements-
 ```
 
 Tests: `cd api && npm test`, `cd client && npm test`, `cd scraper && .venv/Scripts/python -m pytest`.
+
+## Deploying to AWS
+
+Step by step, including account setup and GitHub secrets: [docs/DEPLOY.md](docs/DEPLOY.md). Deploys run from the Actions tab and use `infra/template.yaml` (AWS SAM).
 
 ## Keeping AWS free (when hosting there)
 

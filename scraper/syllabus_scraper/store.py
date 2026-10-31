@@ -36,6 +36,10 @@ class Store:
         doc = self.db["syllabi.files"].find_one({"metadata.sourceUrl": source_url}, {"metadata": 1})
         return (str(doc["_id"]), doc["metadata"]["contentType"]) if doc else None
 
+    def course_title(self, code):
+        item = self.table.get_item(Key={"PK": f"COURSE#{code}", "SK": "META"}).get("Item")
+        return item["title"] if item else None
+
     def save_file(self, data, source_url, content_type):
         filename = source_url.rsplit("/", 1)[-1]
         file_id = self.bucket.upload_from_stream(
@@ -60,7 +64,7 @@ class Store:
                     "instructors": row.instructors,
                     "fileId": file_id,
                     "contentType": content_type,
-                    "source": "gmu-cs",
+                    "source": row.source,
                     "sourceUrl": source_url,
                     "createdAt": now,
                 }

@@ -36,6 +36,8 @@ class Row:
     instructors: list
     href: str
     term: Term = field(default=None)
+    # "gmu-cs" rows come from a listing page; "gmu-cs-filename" rows were guessed from a file name.
+    source: str = "gmu-cs"
 
 
 def parse_term(text):
@@ -69,6 +71,75 @@ def parse_instructors(text):
     if names == ["All"]:
         return ["All instructors"]
     return names or ["Staff"]
+
+
+FILE_COURSE = re.compile(
+    r"^(?:(?P<dept>[A-Z]{2,4})[ _]?)?(?P<num>\d{3})(?:/\d{3}|_[A-Z]{2,4}_\d{3})?(?P<rest>.*)$"
+)
+FILE_REST = re.compile(r"^(?P<names>[A-Za-z'_.-]*?)(?P<section>(?:\d{3}|DL\d|H\d{2}).*|All_Sections|All|ALL)?$")
+
+
+def _file_instructors(names):
+    # "ShamseddineMCS-555-004": drop the repeated "CS-" before the course number.
+    names = re.sub(r"(?:CS|SWE|ISA|IT|INFS)-$", "", names).strip("_-. ")
+    if not names:
+        return ["Staff"]
+    if names.lower() == "all":
+        return ["All instructors"]
+    parts = [p for p in names.split("_") if p]
+    # "ZamanA" / "Gonzalez_HernandezA": one person, surname then first initial.
+    single = re.match(r"^(.*[a-z])([A-Z]{1,2})$", parts[-1])
+    if single:
+        surname = " ".join(parts[:-1] + [single.group(1)])
+        return [f"{surname}, {single.group(2)}"]
+    # "Gopalkrishna_Kamberi_Zaman": several surnames.
+    return parts
+
+
+def _file_section(section, course_number):
+    if not section:
+        return "N/A"
+    if section.lower().startswith("all"):
+        return "All"
+    tokens = [t for t in re.findall(r"\d{3}|DL\d|H\d{2}", section) if t != course_number]
+    return ", ".join(dict.fromkeys(tokens)) or "N/A"
+
+
+def parse_filename(path, term):
+    """Guesses a Row from an archived file name when no listing page survived.
+    '/media/syllabi/Spring2023/CS_321PettitR002_006.pdf' -> CS321, 'Pettit, R', '002, 006'.
+    The course title isn't in the file name, so it's left empty for the caller to fill."""
+    name = path.split(f"{term.season}{term.year}/", 1)[-1]
+    stem = re.sub(r"\.(pdf|html?)$", "", name, flags=re.I)
+    course = FILE_COURSE.match(stem)
+    if not course:
+        return None
+    dept = course.group("dept") or "CS"
+    rest = FILE_REST.match(course.group("rest").lstrip("_ "))
+    names, section = (rest.group("names"), rest.group("section")) if rest else ("", course.group("rest"))
+    return Row(
+        codes=[f"{dept}{course.group('num')}"],
+        section=_file_section(section, course.group("num")),
+        title="",
+        instructors=_file_instructors(names),
+        href=path,
+        term=term,
+        source="gmu-cs-filename",
+    )
+
+
+def terms_between(first, last):
+    """Every term from first to last, oldest first."""
+    terms, season, year = [], SEASONS.index(first.season), first.year
+    while (year, season) <= (last.year, SEASONS.index(last.season)):
+        terms.append(Term(SEASONS[season], year))
+        season = (season + 1) % 3
+        year += season == 0
+    return terms
+
+
+def current_term(today):
+    return Term("Spring" if today.month <= 5 else "Summer" if today.month <= 8 else "Fall", today.year)
 
 
 def clean(text):
