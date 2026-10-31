@@ -1,0 +1,95 @@
+# Runs the whole app on this machine:
+#   docker compose up -d --build                    -> http://localhost:8080
+#   docker compose run --rm scraper --since "Fall 2022"   (load GMU CS syllabi)
+#
+# Local containers stand in for the cloud data stores:
+#   dynamodb -> AWS DynamoDB (course catalog)
+#   mongodb  -> MongoDB Atlas (syllabus files in GridFS)
+# Supabase (upload queue + admin login) and Azure stay on their free cloud tiers;
+# put their keys in .env. Searching works without them.
+x-data-env: &data-env
+  TABLE_NAME: SyllabusSearcher
+  AWS_REGION: us-east-1
+  DYNAMODB_ENDPOINT: http://dynamodb:8000
+  AWS_ACCESS_KEY_ID: local
+  AWS_SECRET_ACCESS_KEY: local
+  MONGODB_URI: mongodb://mongodb:27017
+  MONGODB_DB: syllabus_searcher
+
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:2.5.4
+    container_name: syllabus-dynamodb
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    user: root
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - dynamodb_data:/data
+
+  mongodb:
+    image: mongo:7.0
+    container_name: syllabus-mongodb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Creates the DynamoDB table once, then exits.
+  db-init:
+    build: ./api
+    command: ["node", "scripts/init-table.js"]
+    environment: *data-env
+    depends_on:
+      - dynamodb
+
+  api:
+    build: ./api
+    container_name: syllabus-api
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *data-env
+      PORT: "3001"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      mongodb:
+        condition: service_healthy
+
+  client:
+    build:
+      context: ./client
+      args:
+        VITE_SUPABASE_URL: ${SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+    container_name: syllabus-client
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+  # One-off job, not started by `up`. Run: docker compose run --rm scraper
+  scraper:
+    build: ./scraper
+    profiles: ["tools"]
+    environment: *data-env
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      mongodb:
+        condition: service_healthy
+
+volumes:
+  dynamodb_data:
+  mongo_data:

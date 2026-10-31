@@ -1,0 +1,747 @@
+
+
+<!DOCTYPE html>
+
+<html lang="en-US">
+    <head>
+        <!-- Meta Information -->
+        <meta charset="UTF-8" />
+        <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+        <meta name="keywords" content="" />
+        <meta name="description" content="" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="google-site-verification" content="NA9ZFaDzz7pu2GzkXTBXt1Pszl-pT8BICRmITy9TJ_I" />
+        <!-- Title -->
+        <title>
+             Spring 2022 Syllabi |
+             George Mason Department of Computer Science
+        </title>
+
+        <!-- Favicon -->
+        <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon" />
+
+        <!-- Stylesheets -->
+        <link rel="stylesheet" href="/static/css/gmucs.css" type="text/css" />
+        <link rel="stylesheet" href="/static/css/font-awesome.min.css" type="text/css" />
+
+        
+        <link rel="alternate" type="application/rss+xml" title="RSS" href="/blog/feeds/rss/" />
+        <link rel="alternate" type="application/atom+xml" title="Atom" href="/blog/feeds/atom/" />
+        
+
+        
+
+        <!-- Allow adding additional header items in child layouts. -->
+        
+    </head>
+    <body>
+
+        
+        <header>
+            <div class="padded-row">
+                <div id="cs-logo">
+                    <h1>
+                        <a class="img-link" href="/">
+                            <img class="img-logo" src="/static/images/logo.png" alt="GMU CS Department">
+                        </a>
+                    </h1>
+                </div>
+                <div id="search">
+                    
+<form id="search-form" action="/search/" role="search">
+
+    <input name="q" id="search-textfield" type="text" value=""><button id="search-button" type="submit"><i class="fa fa-search"></i></button>
+
+
+
+</form>
+
+                </div>
+                <nav id="nav-user">
+                    <ul>
+                        
+
+
+<li>
+	<a href="http://www.gmu.edu">
+        Mason Home	
+	</a>
+</li>
+
+
+
+<li>
+	<a href="https://computing.gmu.edu/">
+        School of Computing Home	
+	</a>
+</li>
+
+<li>
+        <a href="https://cec.gmu.edu/">
+        CEC Home        
+        </a>
+</li>
+
+<li>
+	<a href="/about/contact-info/">
+	 Contact	
+	</a>
+</li>
+
+<li>
+	<a href="/community/support-cs-gmu/">
+	Give	
+	</a>
+</li>
+
+                    </ul>
+                </nav>
+            </div>
+            
+            
+            <nav id="nav-topic">
+                
+
+<ul id="gmu-nav-menu"><li><a href="/about/">
+                About
+                <b class="caret"></b></a><ul><li><a href="/about/contact-info/">Contact Info</a></li><li><a href="/about/visit-the-department/">Visit the Department</a></li><li><a href="/about/fast-facts/">Fast Facts</a></li><li><a href="/about/departmental-report/">Reports and Newsletters</a></li><li><a href="/about/faculty-awards/">Faculty Awards</a></li><li><a href="/about/distinguished-lecture-series/">Distinguished Lecture Series</a></li><li><a href="/blog/category/news/">News</a></li><li><a href="/events/">Events</a></li></ul></li><li><a href="/directory/">
+                People
+                <b class="caret"></b></a><ul><li><a href="/directory/by-category/faculty/">Faculty</a></li><li><a href="/directory/by-category/affiliated-faculty/">Affiliated Faculty</a></li><li><a href="/directory/by-category/staff/">Staff</a></li><li><a href="/directory/by-category/postdocs/">Postdoctoral Scholars</a></li><li><a href="/directory/phd-students-info/">PhD Students</a></li><li><a href="/directory/by-category/emeritus-faculty/">Emeritus Faculty</a></li><li><a href="/directory/by-category/adjunct-faculty/">Adjunct Faculty</a></li></ul></li><li><a href="/research/">
+                Research
+                <b class="caret"></b></a><ul><li><a href="/research/research-areas/">Research Areas</a></li><li><a href="/research/campus-collaborations/">Cross-campus Collaborations</a></li><li><a href="/research/labs-and-centers/">Centers and Laboratories</a></li><li><a href="/blog/category/research-highlights/">Research Highlights</a></li><li><a href="/research/books-and-software/">Books</a></li><li><a href="/research/software/">Software</a></li><li><a href="/research/technical-reports/">Technical Reports</a></li></ul></li><li><a href="/prospective-students/">
+                Prospective Students
+                <b class="caret"></b></a><ul><li><a href="/prospective-students/undergraduate-programs/">Undergraduate Programs</a></li><li><a href="/prospective-students/ms-programs/">Masters Programs</a></li><li><a href="/prospective-students/phd-program/">PhD in Computer Science</a></li><li><a href="https://www2.gmu.edu/admissions-aid/apply-now">Apply Now</a></li></ul></li><li><a href="/current-students/">
+                Current Students
+                <b class="caret"></b></a><ul><li><a href="/current-students/undergraduates/">Undergraduates</a></li><li><a href="/current-students/bachelorsaccelerated-masters/">Accelerated Master&#39;s</a></li><li><a href="/current-students/ms-students/">Masters Students</a></li><li><a href="/current-students/doctoral-students/">Doctoral Students</a></li><li><a href="/current-students/life-after-csgmu/">Life after CS@Mason</a></li></ul></li><li><a href="/academics/">
+                Academics
+                <b class="caret"></b></a><ul><li><a href="/academics/courses/">Courses</a></li><li><a href="/syllabi/">Course Syllabi</a></li><li><a href="/academics/faculty-office-hours/">Faculty Office Hours</a></li><li><a href="/academics/gta-office-hours/">GTA Office Hours</a></li><li><a href="/academics/computing-for-all/">Computing for All</a></li><li><a href="https://masononline.gmu.edu/programs/ms-computer-science/">Online MS in Computer Science</a></li></ul></li><li><a href="/inclusive-computing/">
+                Inclusive Computing
+                <b class="caret"></b></a><ul><li><a href="https://cec.gmu.edu/partners/women-computing">Break Through Tech: For Women in Computing</a></li><li><a href="https://drive.google.com/file/d/1ddcJgs7v395gIpgqLWsjdmvovlR3f1Sc/view">Broadening Participation in Computing Plan</a></li></ul></li><li><a href="/community/">
+                Community
+                <b class="caret"></b></a><ul><li><a href="/community/alumni/">Alumni</a></li><li><a href="/community/alumni-news/">Alumni Profiles</a></li><li><a href="/community/advisory-board/">External Advisory Board</a></li><li><a href="/community/student-organizations/">Student Organizations</a></li><li><a href="/community/become-a-partner/">Corporate Partners</a></li><li><a href="/community/support-cs-gmu/">Support CS @ Mason</a></li></ul></li><li><a href="/resources/">
+                Resources
+                <b class="caret"></b></a><ul><li><a href="/resources/computer-accounts/">Computing Resources</a></li><li><a href="/resources/student-forms/">Student Forms</a></li><li><a href="/resources/honor-code/">Honor Code</a></li><li><a href="/resources/employment-opportunities/">Employment</a></li></ul></li></ul>
+
+            </nav>
+        </header>
+
+        
+        <div id="content">
+        
+            <div id="page-content">
+                <div id="breadcrumb-header">
+                    <h2 class="title"> Spring 2022 Syllabi </h2>
+                </div>
+                <div id="page-container" class="clear">
+                    
+                    
+                    
+
+
+                    
+<div id="page-article">
+
+  
+  <p> <a href="/syllabi/all_semesters">
+     List of all syllabi by semester.
+  </a></p>
+
+  
+  <table class="syllabus-table">
+    <tr>
+      <!-- <th> Year </th> -->
+      <!-- <th> Semester </th> -->
+      <th> Number </th> 
+      <th> Section(s) </th> 
+      <th> Name </th> 
+      <th> Instructor </th>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_100ZamanA001.pdf"> CS 100 </a></td>
+      <td> 001 </td>
+      <td> Principles of Computing </td>
+      <td> Zaman, A </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_110Kamberi_OttenAll.html"> CS 110 </a></td>
+      <td> All </td>
+      <td> Essentials of Computer Science </td>
+      <td> Kamberi, Otten,  </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_112Hrolenok_Kamberi_ZamanAll_Sections.pdf"> CS 112 </a></td>
+      <td> All Sections </td>
+      <td> Introduction to Computer Programming </td>
+      <td> Hrolenok, Kamberi, Zaman,  </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_211MengistuTH01.html"> CS 211 </a></td>
+      <td> H01 </td>
+      <td> Object Oriented Programming </td>
+      <td> Mengistu, T </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_211Dimitriadis_Mengistu1_2_3.html"> CS 211 </a></td>
+      <td> 1, 2, 3 </td>
+      <td> Object-oriented programming </td>
+      <td> Dimitriadis, Mengistu,  </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_222ChenJ001.html"> CS 222 </a></td>
+      <td> 001 </td>
+      <td> Computer Program for Engineers </td>
+      <td> Chen, J </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_262GonzalezAAll.pdf"> CS 262 </a></td>
+      <td> All </td>
+      <td> Introduction to Low-Level Programming </td>
+      <td> Gonzalez, A </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_306Geldon_Maddox_OttenAll.html"> CS 306 </a></td>
+      <td> All </td>
+      <td> Synth. of Ethics &amp; Law for the Computing Professional </td>
+      <td> Geldon, Maddox, Otten,  </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS310Masri_Mengistu_RussellAll.html"> CS 310 </a></td>
+      <td> All </td>
+      <td> Data Structures </td>
+      <td> Masri, Mengistu, Russell,  </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_321PettitR005.pdf"> CS 321 </a></td>
+      <td> 005 </td>
+      <td> Software Engineering </td>
+      <td> Pettit, R </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_321SoundararajanS002_003_004.pdf"> CS 321 </a></td>
+      <td> 002, 003, 004 </td>
+      <td> Software Engineering </td>
+      <td> Soundararajan, S </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_325GingoldY.html"> CS 325 </a></td>
+      <td>  </td>
+      <td> Introduction to Game Design </td>
+      <td> Gingold, Y </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_330ManiP001.pdf"> CS 330 </a></td>
+      <td> 001 </td>
+      <td> Formal Methods and Models </td>
+      <td> Mani, P </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_330ManiP003.pdf"> CS 330 </a></td>
+      <td> 003 </td>
+      <td> Formal Methods and Models </td>
+      <td> Mani, P </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_330BaldimtsiF002.pdf"> CS 330 </a></td>
+      <td> 002 </td>
+      <td> Formal Methods and Models </td>
+      <td> Baldimtsi, F </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_351YuLDL1.pdf"> CS 351 </a></td>
+      <td> DL1 </td>
+      <td> Visual Computing </td>
+      <td> Yu, L </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_367AllAll.html"> CS 367 </a></td>
+      <td> All </td>
+      <td> Computer Systems and Programming </td>
+      <td> All,  </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_426GingoldY.html"> CS 426 </a></td>
+      <td>  </td>
+      <td> Game Programming II </td>
+      <td> Gingold, Y </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_440WhiteE002.pdf"> CS 440 </a></td>
+      <td> 002 </td>
+      <td> Language Processing </td>
+      <td> White, E </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_440ZhongY001.html"> CS 440 </a></td>
+      <td> 001 </td>
+      <td> Language Processors and Programming Environments </td>
+      <td> Zhong, Y </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_450DengP002.pdf"> CS 450 </a></td>
+      <td> 002 </td>
+      <td> Database Concepts </td>
+      <td> Deng, P </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_451ChenJ001.pdf"> CS 451 </a></td>
+      <td> 001 </td>
+      <td> Computer Graphics </td>
+      <td> Chen, J </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_463SnyderM001.html"> CS 463 </a></td>
+      <td> 001 </td>
+      <td> Comparative Programming Languages </td>
+      <td> Snyder, M </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_465ZhongY001.html"> CS 465 </a></td>
+      <td> 001 </td>
+      <td> Computer Systems Architecture </td>
+      <td> Zhong, Y </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_468SimonR001.html"> CS 468 </a></td>
+      <td> 001 </td>
+      <td> Secure Programming and Systems </td>
+      <td> Simon, R </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS471ChenS003.html"> CS471 </a></td>
+      <td> 003 </td>
+      <td> Operating Systems </td>
+      <td> Chen, S </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_471AydinH002.html"> CS 471 </a></td>
+      <td> 002 </td>
+      <td> Operating Systems </td>
+      <td> Aydin, H </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_471AndreaK001_004.html"> CS 471 </a></td>
+      <td> 001, 004 </td>
+      <td> Operating Systems </td>
+      <td> Andrea, K </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_480LukeS002.html"> CS 480 </a></td>
+      <td> 002 </td>
+      <td> Introduction to Artificial Intelligence </td>
+      <td> Luke, S </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_480LukeS001.html"> CS 480 </a></td>
+      <td> 001 </td>
+      <td> Introduction to Artificial Intelligence </td>
+      <td> Luke, S </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_482KoseckaJ001.html"> CS 482 </a></td>
+      <td> 001 </td>
+      <td> Computer Vision </td>
+      <td> Kosecka, J </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS 483RussellK001/003_Russell_ONLY.html"> CS 483 </a></td>
+      <td> 001/003 (Russell ONLY) </td>
+      <td> Analysis of Algorithms </td>
+      <td> Russell, K </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_483LiF002.pdf"> CS 483 </a></td>
+      <td> 002 </td>
+      <td> Analysis of Algorithms </td>
+      <td> Li, F </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_484DomeniconiC002.html"> CS 484 </a></td>
+      <td> 002 </td>
+      <td> Data Mining </td>
+      <td> Domeniconi, C </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_491Bailey_Styx001.pdf"> CS 491 </a></td>
+      <td> 001 </td>
+      <td> Industry-Sponsored Senior Design Project </td>
+      <td> Bailey, Styx,  </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS499YaoZ001.pdf"> CS 499 </a></td>
+      <td> 001 </td>
+      <td> Natural Language Processing </td>
+      <td> Yao, Z </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_499YaoS002.pdf"> CS 499 </a></td>
+      <td> 002 </td>
+      <td> Deep Learning </td>
+      <td> Yao, S </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS 499/695BaldimtsiF.pdf"> CS 499/ 695 </a></td>
+      <td>  </td>
+      <td> Advanced Cryptography </td>
+      <td> Baldimtsi, F </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS 504DengP002/003.pdf"> CS 504 </a></td>
+      <td> 002/003 </td>
+      <td> Principles of Data Management and Mining </td>
+      <td> Deng, P </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_540WhiteE001.pdf"> CS 540 </a></td>
+      <td> 001 </td>
+      <td> Language Processing </td>
+      <td> White, E </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_571ChengY.html"> CS 571 </a></td>
+      <td>  </td>
+      <td> Operating Systems </td>
+      <td> Cheng, Y </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_580TecuciGDL1.pdf"> CS 580 </a></td>
+      <td> DL1 </td>
+      <td> Introduction to Artificial Intelligence </td>
+      <td> Tecuci, G </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_580HrolenokB001.pdf"> CS 580 </a></td>
+      <td> 001 </td>
+      <td> Introduction to Artificial Intelligence </td>
+      <td> Hrolenok, B </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS583LiF001.pdf"> CS 583 </a></td>
+      <td> 001 </td>
+      <td> Analysis of Algorithms </td>
+      <td> Li, F </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_663YuLDL1.pdf"> CS 663 </a></td>
+      <td> DL1 </td>
+      <td> Computational Design </td>
+      <td> Yu, L </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_672MenasceD001.html"> CS 672 </a></td>
+      <td> 001 </td>
+      <td> Computer System Performance Evaluation </td>
+      <td> Menasce, D </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS675ChenS001.html"> CS675 </a></td>
+      <td> 001 </td>
+      <td> Distributed Systems </td>
+      <td> Chen, S </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_688AnastasopoulosA001.pdf"> CS 688 </a></td>
+      <td> 001 </td>
+      <td> Machine Learning </td>
+      <td> Anastasopoulos, A </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_695SteinG.pdf"> CS 695 </a></td>
+      <td>  </td>
+      <td> Foundations of Planning </td>
+      <td> Stein, G </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_695HanB001.pdf"> CS 695 </a></td>
+      <td> 001 </td>
+      <td> Mobile Immersive Computing </td>
+      <td> Han, B </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS_747BarbaraD001.html"> CS 747 </a></td>
+      <td> 001 </td>
+      <td> Deep Learning </td>
+      <td> Barbara, D </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/CS/SWE-795MoranK001004.html"> CS/SWE-795 </a></td>
+      <td> 001,004 </td>
+      <td> Intersections of Deep Learning &amp; Software Engineering </td>
+      <td> Moran, K </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/ISA_674WangX001.html"> ISA 674 </a></td>
+      <td> 001 </td>
+      <td> Intrusion Detection </td>
+      <td> Wang, X </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/syllabi/Spring2022/SWE_621PettitR001.pdf"> SWE 621 </a></td>
+      <td> 001 </td>
+      <td> Software Modeling and Architecture Design </td>
+      <td> Pettit, R </td>
+    </tr>
+    
+    <tr>
+      <!-- <td> 2022 </td> -->
+      <!-- <td> Spring </td> -->
+      <td> <a href="/media/"> SWE 625 </a></td>
+      <td> 001 </td>
+      <td> Software Project Management </td>
+      <td> Nidiffer, K </td>
+    </tr>
+    
+  </table>
+  
+  
+
+</div>
+
+                    
+                    
+
+                    
+                </div>
+            </div>
+        
+        </div>
+
+        
+        <footer>
+            <div class="padded-row">
+                <div id="gmu-logo">
+                    <a class="img-link" href="http://www.gmu.edu">
+                        <img src="/static/images/gmu_white_logo.png" alt="George Mason University Logo">
+                    </a>
+                </div>
+                <div id="address">
+                    <p>
+                        Department of Computer Science<br />
+                        Nguyen Engineering Building<br />
+                        4400 University Drive<br />
+                        Fairfax, VA 22030<br />
+                    </p>
+                </div>
+                <div id="contact">
+                    <p>
+                        <a href="/about/contact-info/">Contact</a><br />
+                        703-993-1530 (P)<br />
+                        703-993-1710 (F)<br />
+                    </p>
+                </div>
+                <div id="footer-links">
+                    <p>
+                        <ul>
+                            
+
+<li id="https:--masononline.gmu.edu-programs-ms-computer-science-"><a href="https://masononline.gmu.edu/programs/ms-computer-science/">
+	            Online MS in Computer Science
+	        </a></li><li id="https:--webdev.gmu.edu-internet-privacy-"><a href="https://webdev.gmu.edu/internet-privacy/">
+	            Privacy Statement
+	        </a></li><li id="https:--irr2.gmu.edu-New-N_IRRHome-HEOA-"><a href="https://irr2.gmu.edu/New/N_IRRHome/HEOA/">
+	            Student Consumer Information
+	        </a></li><li id="reu-syllabus"><a href="/reu/syllabus/">
+	            Syllabus
+	        </a></li>
+
+                        </ul>
+                </div>
+            </div>
+            
+        </footer>
+
+        
+        <a href="#" id="toTop">
+            <i class="fa fa-angle-up"></i>
+        </a>
+
+	
+
+        <script src="/static/js/jquery.js"></script>
+        <script src="/static/js/jquery.easing.1.3.js"></script>
+        <script src="/static/js/jquery.ui.totop.js"></script>
+        <script src="/static/js/jquery.mobilemenu.js"></script>
+        <script src="/static/js/script.js"></script>
+
+        <!-- Allow adding additional javascript in child layouts. -->
+        
+
+        
+        
+
+
+
+
+
+
+
+
+
+        <!--[if lt IE 9]>
+            <script src="/static/js/html5shiv.js"></script>
+            <link rel="stylesheet" type="text/css" media="screen" src="/static/css/ie.css">
+        <![endif]-->
+    </body>
+</html>
