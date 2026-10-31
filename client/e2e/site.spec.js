@@ -45,7 +45,7 @@ test('filter a course by professor', async ({ page }) => {
 test('unknown course offers an upload', async ({ page }) => {
   await page.goto('/courses/CS999');
   await expect(page.getByText('No syllabi found for CS999')).toBeVisible();
-  await page.getByRole('link', { name: 'Upload', exact: true }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Upload', exact: true }).click();
   await expect(page.getByLabel('Course code')).toHaveValue('CS999');
 });
 
