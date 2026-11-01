@@ -4,14 +4,29 @@ export const FILE_B = 'bbbbbbbbbbbbbbbbbbbbbbbb';
 export const FILE_C = 'cccccccccccccccccccccccc';
 
 const courses = [
-  { code: 'CS310', display: 'CS 310', title: 'Data Structures' },
-  { code: 'CS483', display: 'CS 483', title: 'Analysis of Algorithms' },
+  { code: 'CS105', display: 'CS 105', title: 'Computer Ethics and Society', hasSyllabi: false },
+  { code: 'CS310', display: 'CS 310', title: 'Data Structures', hasSyllabi: true },
+  { code: 'CS483', display: 'CS 483', title: 'Analysis of Algorithms', hasSyllabi: true },
 ];
+
+// In the official catalog but no syllabus on file yet.
+const cs105 = {
+  code: 'CS105',
+  display: 'CS 105',
+  title: 'Computer Ethics and Society',
+  credits: '1',
+  description: 'Intensive introduction to legal, social, and ethical issues surrounding software development.',
+  prereqs: '',
+  offerings: [],
+};
 
 const cs310 = {
   code: 'CS310',
   display: 'CS 310',
   title: 'Data Structures',
+  credits: '3',
+  description: 'Fundamental data structures and their implementations.',
+  prereqs: 'CS 211 (C) and MATH 113 (C)',
   offerings: [
     { termKey: '2024-3', termLabel: 'Fall 2024', section: '001', instructors: ['Russell, K'], fileId: FILE_A, source: 'gmu-cs' },
     { termKey: '2024-3', termLabel: 'Fall 2024', section: '002', instructors: ['Masri, W'], fileId: FILE_B, source: 'gmu-cs' },
@@ -73,6 +88,7 @@ export async function mockApi(page, { onUpload } = {}) {
     const path = url.pathname;
     if (path === '/api/courses') return route.fulfill(json({ dept: 'CS', courses }));
     if (path === '/api/courses/CS310') return route.fulfill(json(cs310));
+    if (path === '/api/courses/CS105') return route.fulfill(json(cs105));
     if (path.startsWith('/api/courses/')) return route.fulfill(json({ error: 'No syllabi found for CS999' }, 404));
     if (path === '/api/professors') return route.fulfill(json({ professors }));
     if (path === '/api/search') {

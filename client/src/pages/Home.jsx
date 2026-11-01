@@ -1,12 +1,30 @@
+import { useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Autocomplete, Box, Card, CardActionArea, Grid, Link, Skeleton, TextField, Typography } from '@mui/material';
+import {
+  Alert,
+  Autocomplete,
+  Box,
+  Card,
+  CardActionArea,
+  FormControlLabel,
+  Grid,
+  Link,
+  Skeleton,
+  Stack,
+  Switch,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { api } from '../api';
 
 export default function Home() {
   const navigate = useNavigate();
   const { data, isPending, error } = useQuery({ queryKey: ['courses'], queryFn: api.courses });
   const courses = data?.courses || [];
+  const [onlyWithSyllabi, setOnlyWithSyllabi] = useState(false);
+  const listed = onlyWithSyllabi ? courses.filter((c) => c.hasSyllabi) : courses;
+  const withSyllabi = courses.filter((c) => c.hasSyllabi).length;
 
   return (
     <>
@@ -42,9 +60,20 @@ export default function Home() {
 
       {error && <Alert severity="error">Couldn&apos;t load courses: {error.message}</Alert>}
 
-      <Typography variant="h6" component="h2" sx={{ mb: 2 }}>
-        All CS courses
-      </Typography>
+      <Stack direction="row" sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap', columnGap: 2 }}>
+        <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
+          All CS courses
+          {!isPending && (
+            <Typography component="span" color="text.secondary" sx={{ ml: 1 }}>
+              {withSyllabi} of {courses.length} have syllabi
+            </Typography>
+          )}
+        </Typography>
+        <FormControlLabel
+          control={<Switch checked={onlyWithSyllabi} onChange={(e) => setOnlyWithSyllabi(e.target.checked)} />}
+          label="Only with syllabi"
+        />
+      </Stack>
       <Grid container spacing={1.5}>
         {isPending &&
           Array.from({ length: 9 }, (_, i) => (
@@ -52,7 +81,7 @@ export default function Home() {
               <Skeleton variant="rounded" height={72} />
             </Grid>
           ))}
-        {courses.map((course) => (
+        {listed.map((course) => (
           <Grid key={course.code} size={{ xs: 12, sm: 6, md: 4 }}>
             <Card variant="outlined" sx={{ height: '100%' }}>
               <CardActionArea component={RouterLink} to={`/courses/${course.code}`} sx={{ p: 1.5, height: '100%' }}>
@@ -60,6 +89,11 @@ export default function Home() {
                 <Typography variant="body2" color="text.secondary" noWrap>
                   {course.title}
                 </Typography>
+                {!course.hasSyllabi && (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    No syllabi yet
+                  </Typography>
+                )}
               </CardActionArea>
             </Card>
           </Grid>

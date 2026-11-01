@@ -86,6 +86,32 @@ test('search by second surname and pick with the keyboard', async ({ page }) => 
   await expect(page).toHaveURL(/\/professors\/gonzalez-samudio-david$/);
 });
 
+test('a catalog course with no syllabi shows its details and asks for one', async ({ page }) => {
+  await page.goto('/courses/CS105');
+  await expect(page.getByRole('heading', { name: 'CS 105' })).toBeVisible();
+  await expect(page.getByText('1 credit', { exact: true })).toBeVisible();
+  await expect(page.getByText(/legal, social, and ethical issues/)).toBeVisible();
+  await expect(page.getByText('No syllabi for CS 105 yet.')).toBeVisible();
+  await expect(page.getByLabel('Term')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Upload' }).last().click();
+  await expect(page).toHaveURL(/\/upload\?course=CS105$/);
+});
+
+test('course page shows credits and prerequisites', async ({ page }) => {
+  await page.goto('/courses/CS310');
+  await expect(page.getByText('3 credits')).toBeVisible();
+  await expect(page.getByText('CS 211 (C) and MATH 113 (C)')).toBeVisible();
+});
+
+test('home lists every course and can hide ones without syllabi', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByText('2 of 3 have syllabi')).toBeVisible();
+  await expect(page.getByRole('link', { name: /CS 105/ })).toContainText('No syllabi yet');
+  await page.getByLabel('Only with syllabi').check();
+  await expect(page.getByRole('link', { name: /CS 105/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /CS 310/ })).toBeVisible();
+});
+
 test('unknown pages show not found', async ({ page }) => {
   await page.goto('/no/such/page');
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();

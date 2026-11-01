@@ -71,28 +71,74 @@ class Store:
         )
         return str(file_id)
 
+    def _touch_course(self, dept, code, title, now):
+        """Course list entry + course record. Updates rather than replaces, so catalog details
+        (description, credits) survive, and an existing title (the catalog's) is kept."""
+        self.table.update_item(
+            Key={"PK": f"DEPT#{dept}", "SK": f"COURSE#{code}"},
+            UpdateExpression="SET code = :code, title = if_not_exists(title, :title), hasSyllabi = :yes, updatedAt = :now",
+            ExpressionAttributeValues={":code": code, ":title": title, ":yes": True, ":now": now},
+        )
+        self.table.update_item(
+            Key={"PK": f"COURSE#{code}", "SK": "META"},
+            UpdateExpression="SET code = :code, title = if_not_exists(title, :title), updatedAt = :now",
+            ExpressionAttributeValues={":code": code, ":title": title, ":now": now},
+        )
+
     def save_offering(self, dept, code, row, file_id, content_type, source_url):
         now = datetime.now(timezone.utc).isoformat()
-        with self.table.batch_writer() as batch:
-            batch.put_item(Item={"PK": f"DEPT#{dept}", "SK": f"COURSE#{code}", "code": code, "title": row.title, "updatedAt": now})
-            batch.put_item(Item={"PK": f"COURSE#{code}", "SK": "META", "code": code, "title": row.title, "updatedAt": now})
-            batch.put_item(
-                Item={
-                    "PK": f"COURSE#{code}",
-                    "SK": f"TERM#{row.term.key}#SEC#{row.section}#{file_id}",
-                    "code": code,
-                    "title": row.title,
-                    "termKey": row.term.key,
-                    "termLabel": row.term.label,
-                    "section": row.section,
-                    "instructors": row.instructors,
-                    "fileId": file_id,
-                    "contentType": content_type,
-                    "source": row.source,
-                    "sourceUrl": source_url,
-                    "createdAt": now,
-                }
+        self._touch_course(dept, code, row.title, now)
+        self.table.put_item(
+            Item={
+                "PK": f"COURSE#{code}",
+                "SK": f"TERM#{row.term.key}#SEC#{row.section}#{file_id}",
+                "code": code,
+                "title": row.title,
+                "termKey": row.term.key,
+                "termLabel": row.term.label,
+                "section": row.section,
+                "instructors": row.instructors,
+                "fileId": file_id,
+                "contentType": content_type,
+                "source": row.source,
+                "sourceUrl": source_url,
+                "createdAt": now,
+            }
+        )
+
+    def save_catalog(self, dept, courses):
+        """Adds every course from the official catalog, with or without a syllabus.
+        The catalog's title, credits, description and prerequisites win over the listings'."""
+        now = datetime.now(timezone.utc).isoformat()
+        with_syllabi = {o["code"] for offerings in self.offerings_by_file().values() for o in offerings}
+        for course in courses:
+            code = course["code"]
+            self.table.update_item(
+                Key={"PK": f"DEPT#{dept}", "SK": f"COURSE#{code}"},
+                UpdateExpression=(
+                    "SET code = :code, title = :title, inCatalog = :yes, hasSyllabi = :has, updatedAt = :now"
+                ),
+                ExpressionAttributeValues={
+                    ":code": code, ":title": course["title"], ":yes": True, ":has": code in with_syllabi, ":now": now,
+                },
             )
+            self.table.update_item(
+                Key={"PK": f"COURSE#{code}", "SK": "META"},
+                UpdateExpression=(
+                    "SET code = :code, title = :title, credits = :credits, description = :description, "
+                    "prereqs = :prereqs, inCatalog = :yes, updatedAt = :now"
+                ),
+                ExpressionAttributeValues={
+                    ":code": code,
+                    ":title": course["title"],
+                    ":credits": course["credits"],
+                    ":description": course["description"],
+                    ":prereqs": course["prereqs"],
+                    ":yes": True,
+                    ":now": now,
+                },
+            )
+        return len(courses)
 
     def offerings_by_file(self):
         """Every offering in DynamoDB, grouped by the file it points to."""

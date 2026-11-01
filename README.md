@@ -2,7 +2,7 @@
 
 Look up a GMU Computer Science course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed.
 
-- **By course**: search a code or title, then filter by term and professor.
+- **By course**: every CS course in GMU's official catalog, with credits, description and prerequisites. Search a code or title, then filter syllabi by term and professor. Courses with no syllabus yet ask students to upload one.
 - **By professor**: search by first or last name ("Ziwei", "Zhu", "David Gonzalez") and see every course and term they have a syllabus for. Full names are read from the syllabi when the department listing only gives an initial.
 - **Inside syllabi**: full-text search for a language, textbook or policy (`Python`, `"late policy"`), with highlighted snippets.
 - **Uploads**: students can add missing syllabi; an admin approves them before they show up.
@@ -47,6 +47,7 @@ docker compose ps                         # what's running
 docker compose logs -f api                # API logs
 curl localhost:8080/api/health            # checks DynamoDB, MongoDB, Supabase
 docker compose run --rm scraper --dry-run # list what would be scraped, write nothing
+docker compose run --rm scraper --catalog-only # refresh the course list from catalog.gmu.edu
 docker compose down                       # stop (data is kept in volumes)
 docker compose down -v                    # stop and delete all local data
 ```
@@ -66,7 +67,9 @@ Without Supabase keys, searching and viewing syllabi work, but uploads and `/adm
 
 Create a Document Intelligence resource on the F0 tier and put its endpoint and key in `.env`. Each upload is then read and the reviewer sees which course codes and terms the PDF mentions. Uploads work without it.
 
-## Where the syllabi come from
+## Where the courses and syllabi come from
+
+The course list comes from GMU's official catalog, `catalog.gmu.edu/courses/cs/` (title, credits, description, prerequisites). Every scrape reloads it, or run just that step with `docker compose run --rm scraper --catalog-only`.
 
 The CS department used to list syllabi at `cs.gmu.edu/syllabi/`, a table of course, section, title and instructor linking to files under `/media/syllabi/<Term>/`. Those pages and files started returning 404 in late 2025, so the scraper falls back to the Internet Archive's copies.
 

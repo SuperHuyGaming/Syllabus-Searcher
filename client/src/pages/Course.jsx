@@ -61,10 +61,53 @@ export default function Course() {
       <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
         {course.display}
       </Typography>
-      <Typography variant="h6" component="p" color="text.secondary" sx={{ mb: 3 }}>
+      <Typography variant="h6" component="p" color="text.secondary" sx={{ mb: 2 }}>
         {course.title}
       </Typography>
+      <CourseDetails course={course} />
 
+      {offerings.length === 0 ? (
+        <Stack spacing={2}>
+          <Alert severity="info">No syllabi for {course.display} yet.</Alert>
+          <UploadPrompt code={code} first />
+        </Stack>
+      ) : (
+        <CourseSyllabi
+          code={code}
+          term={term}
+          setTerm={setTerm}
+          terms={terms}
+          instructor={instructor}
+          setInstructor={setInstructor}
+          instructors={instructors}
+          visible={visible}
+        />
+      )}
+    </>
+  );
+}
+
+// Credits, catalog description and prerequisites, for courses in the official catalog.
+function CourseDetails({ course }) {
+  if (!course.description && !course.credits && !course.prereqs) return null;
+  return (
+    <Box sx={{ mb: 3 }}>
+      {course.credits && (
+        <Chip size="small" label={`${course.credits} credit${course.credits === '1' ? '' : 's'}`} sx={{ mb: 1 }} />
+      )}
+      {course.description && <Typography sx={{ mb: 1 }}>{course.description}</Typography>}
+      {course.prereqs && (
+        <Typography variant="body2" color="text.secondary">
+          <strong>Prerequisites:</strong> {course.prereqs}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+function CourseSyllabi({ code, term, setTerm, terms, instructor, setInstructor, instructors, visible }) {
+  return (
+    <>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
         <TextField select label="Term" value={term} onChange={(e) => setTerm(e.target.value)} sx={{ minWidth: 180 }}>
           <MenuItem value={ALL}>All terms</MenuItem>
@@ -150,7 +193,7 @@ export default function Course() {
   );
 }
 
-function UploadPrompt({ code }) {
+function UploadPrompt({ code, first }) {
   return (
     <Alert
       severity="success"
@@ -161,7 +204,9 @@ function UploadPrompt({ code }) {
         </Button>
       }
     >
-      Have a syllabus for this course that&apos;s missing here? Share it.
+      {first
+        ? 'Took this course? Upload its syllabus so other students can see it.'
+        : 'Have a syllabus for this course that’s missing here? Share it.'}
     </Alert>
   );
 }

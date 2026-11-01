@@ -1,6 +1,7 @@
 // Single-table DynamoDB layout:
-//   PK=DEPT#CS        SK=COURSE#CS310                     -> course list for search
-//   PK=COURSE#CS310   SK=META                             -> course title
+//   PK=DEPT#CS        SK=COURSE#CS310                     -> course list for search (hasSyllabi, inCatalog)
+//   PK=COURSE#CS310   SK=META                             -> title, plus credits/description/prereqs
+//                                                            for courses in the official catalog
 //   PK=COURSE#CS310   SK=TERM#2022-3#SEC#001#<fileId>     -> one syllabus offering
 //   PK=RATE#<ipHash>  SK=<hour>                           -> upload rate limit (TTL)
 //   PK=CURATED        SK=<sourceUrl>                      -> scraped file an admin edited or deleted;
@@ -10,7 +11,6 @@ const {
   DynamoDBDocumentClient,
   QueryCommand,
   ScanCommand,
-  BatchWriteCommand,
   UpdateCommand,
   GetCommand,
   PutCommand,
@@ -39,13 +39,41 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
   }
   const queryAll = (params) => readAll(QueryCommand, params);
 
+  // Marks a course as having syllabi and sets its title, on both the list entry and the course record.
+  async function touchCourse({ dept, code, title, keepTitle }) {
+    const titleExpr = keepTitle ? 'title = if_not_exists(title, :title)' : 'title = :title';
+    const now = new Date().toISOString();
+    await db.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `DEPT#${dept}`, SK: `COURSE#${code}` },
+        UpdateExpression: `SET code = :code, ${titleExpr}, hasSyllabi = :yes, updatedAt = :now`,
+        ExpressionAttributeValues: { ':code': code, ':title': title, ':yes': true, ':now': now },
+      })
+    );
+    await db.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `COURSE#${code}`, SK: 'META' },
+        UpdateExpression: `SET code = :code, ${titleExpr}, updatedAt = :now`,
+        ExpressionAttributeValues: { ':code': code, ':title': title, ':now': now },
+      })
+    );
+  }
+
   return {
     async listCourses(dept) {
       const items = await queryAll({
         KeyConditionExpression: 'PK = :pk',
         ExpressionAttributeValues: { ':pk': `DEPT#${dept}` },
       });
-      return items.map(({ code, title }) => ({ code, display: displayCourse(code), title }));
+      // Entries written before the catalog import have no hasSyllabi flag, but they all had syllabi.
+      return items.map(({ code, title, hasSyllabi }) => ({
+        code,
+        display: displayCourse(code),
+        title,
+        hasSyllabi: hasSyllabi !== false,
+      }));
     },
 
     async getCourse(code) {
@@ -69,7 +97,15 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
           contentType,
           source,
         }));
-      return { code, display: displayCourse(code), title: meta.title, offerings };
+      return {
+        code,
+        display: displayCourse(code),
+        title: meta.title,
+        credits: meta.credits || '',
+        description: meta.description || '',
+        prereqs: meta.prereqs || '',
+        offerings,
+      };
     },
 
     // Every offering in the table, for the professor pages. A scan is fine at one
@@ -91,35 +127,28 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       return Item || null;
     },
 
-    // Writes the course list entry, course title and the offering in one batch.
+    // Writes the course entries and the offering. Course entries are updated, not replaced,
+    // so catalog details survive; an existing title (the catalog's) is kept.
     async putOffering({ dept, code, title, term, section, instructors, fileId, contentType, source, sourceUrl }) {
       const now = new Date().toISOString();
+      await touchCourse({ dept, code, title, keepTitle: true });
       await db.send(
-        new BatchWriteCommand({
-          RequestItems: {
-            [tableName]: [
-              { PutRequest: { Item: { PK: `DEPT#${dept}`, SK: `COURSE#${code}`, code, title, updatedAt: now } } },
-              { PutRequest: { Item: { PK: `COURSE#${code}`, SK: 'META', code, title, updatedAt: now } } },
-              {
-                PutRequest: {
-                  Item: {
-                    PK: `COURSE#${code}`,
-                    SK: `TERM#${term.key}#SEC#${section}#${fileId}`,
-                    code,
-                    title,
-                    termKey: term.key,
-                    termLabel: term.label,
-                    section,
-                    instructors,
-                    fileId,
-                    contentType,
-                    source,
-                    sourceUrl,
-                    createdAt: now,
-                  },
-                },
-              },
-            ],
+        new PutCommand({
+          TableName: tableName,
+          Item: {
+            PK: `COURSE#${code}`,
+            SK: `TERM#${term.key}#SEC#${section}#${fileId}`,
+            code,
+            title,
+            termKey: term.key,
+            termLabel: term.label,
+            section,
+            instructors,
+            fileId,
+            contentType,
+            source,
+            sourceUrl,
+            createdAt: now,
           },
         })
       );
@@ -174,23 +203,28 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       );
       if (left.length === 0) {
         const dept = offering.code.match(/^[A-Z]+/)[0];
-        await db.send(new DeleteCommand({ TableName: tableName, Key: { PK: offering.PK, SK: 'META' } }));
-        await db.send(new DeleteCommand({ TableName: tableName, Key: { PK: `DEPT#${dept}`, SK: offering.PK } }));
+        const listKey = { PK: `DEPT#${dept}`, SK: offering.PK };
+        const meta = await this.getCourseMeta(offering.code);
+        if (meta?.inCatalog) {
+          // Catalog courses stay listed, just without syllabi.
+          await db.send(
+            new UpdateCommand({
+              TableName: tableName,
+              Key: listKey,
+              UpdateExpression: 'SET hasSyllabi = :no',
+              ExpressionAttributeValues: { ':no': false },
+            })
+          );
+        } else {
+          await db.send(new DeleteCommand({ TableName: tableName, Key: { PK: offering.PK, SK: 'META' } }));
+          await db.send(new DeleteCommand({ TableName: tableName, Key: listKey }));
+        }
       }
     },
 
+    // Sets a course's title (an admin naming a new course, or renaming one).
     async putCourse({ dept, code, title }) {
-      const now = new Date().toISOString();
-      await db.send(
-        new BatchWriteCommand({
-          RequestItems: {
-            [tableName]: [
-              { PutRequest: { Item: { PK: `DEPT#${dept}`, SK: `COURSE#${code}`, code, title, updatedAt: now } } },
-              { PutRequest: { Item: { PK: `COURSE#${code}`, SK: 'META', code, title, updatedAt: now } } },
-            ],
-          },
-        })
-      );
+      await touchCourse({ dept, code, title, keepTitle: false });
     },
 
     // Marks a scraped file as fixed by an admin, so the weekly scrape doesn't undo the fix.

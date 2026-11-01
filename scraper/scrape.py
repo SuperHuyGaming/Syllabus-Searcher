@@ -4,6 +4,7 @@
     python scrape.py --dry-run                      # parse only, write nothing
     python scrape.py --html tests/fixtures/x.html   # parse saved pages instead of fetching the index
     python scrape.py --index-only                   # just make saved files searchable
+    python scrape.py --catalog-only                 # just load every course from catalog.gmu.edu
 
 Two passes:
   1. Listing pages (live or archived): course, section, title and instructor come from the table.
@@ -20,6 +21,7 @@ from urllib.parse import unquote, urlsplit
 from dotenv import load_dotenv
 
 from syllabus_scraper import sources
+from syllabus_scraper.catalog import fetch_catalog
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
 from syllabus_scraper.store import Store, detect_content_type
 
@@ -115,6 +117,8 @@ def main(argv=None):
     parser.add_argument("--no-filenames", action="store_true", help="Skip the pass that guesses details from file names")
     parser.add_argument("--delay", type=float, default=1.0, help="Seconds between requests")
     parser.add_argument("--index-only", action="store_true", help="Skip scraping; only make saved files searchable")
+    parser.add_argument("--catalog-only", action="store_true", help="Only load the course list from catalog.gmu.edu")
+    parser.add_argument("--no-catalog", action="store_true", help="Skip loading the course list from catalog.gmu.edu")
     parser.add_argument("--reindex", action="store_true", help="Re-extract text for every file, not just new ones")
     args = parser.parse_args(argv)
 
@@ -163,9 +167,24 @@ def main(argv=None):
             if not handle(timestamp, row):
                 return
 
+    def load_catalog():
+        for dept in sorted(DEPARTMENTS):
+            courses = fetch_catalog(fetcher, dept)
+            if not courses:
+                log.warning("Couldn't read the %s course catalog; keeping the current course list", dept)
+                continue
+            log.info("Loaded %d %s courses from the catalog", store.save_catalog(dept, courses), dept)
+
+    if args.catalog_only:
+        if store:
+            load_catalog()
+        return 0
+
     if not args.index_only:
         run()
         log.info("Done: %d rows, %d new files, %d skipped", counts["rows"], counts["saved"], counts["skipped"])
+    if store and not args.no_catalog:
+        load_catalog()
     if store:
         log.info("Made %d syllabi searchable", store.index_text(reindex=args.reindex))
         log.info("Filled in full professor names on %d syllabi", store.resolve_names())
