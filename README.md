@@ -3,7 +3,7 @@
 Look up a GMU Computer Science course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed.
 
 - **By course**: every CS course in GMU's official catalog, with credits, description and prerequisites. Search a code or title, then filter syllabi by term and professor. Courses with no syllabus yet ask students to upload one.
-- **By professor**: search by first or last name ("Ziwei", "Zhu", "David Gonzalez") and see every course and term they have a syllabus for. Full names are read from the syllabi when the department listing only gives an initial.
+- **By professor**: search by first or last name and see every course and term they have a syllabus for. Full names are read from the syllabi when the department listing only gives an initial.
 - **Inside syllabi**: full-text search for a language, textbook or policy (`Python`, `"late policy"`), with highlighted snippets.
 - **Uploads**: students can add missing syllabi as a PDF or, when the professor posted it as a web page, an HTML file; an admin approves them before they show up.
 - **PDF for every syllabus**: syllabi that exist only as web pages get a PDF copy (printed by headless Chromium with scripts and network off), shown as a "PDF" button.
