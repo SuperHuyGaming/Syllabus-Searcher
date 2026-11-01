@@ -24,6 +24,7 @@ import { api, syllabusUrl } from '../api';
 import { supabase } from '../supabase';
 import { groupByTerm, recentTerms, termLabel } from '../lib/terms';
 import { displayCourse } from '../lib/courses';
+import { fileCheckMessage } from '../lib/filecheck';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
 
 // Admins may need to fix syllabi older than the upload form's Fall 2022 cutoff.
@@ -247,6 +248,7 @@ function UploadCard({ upload, token }) {
   }
 
   const detected = upload.detected;
+  const fileCheck = fileCheckMessage(detected?.fileCheck);
   return (
     <Card variant="outlined">
       <CardContent>
@@ -258,7 +260,13 @@ function UploadCard({ upload, token }) {
           Uploaded {new Date(upload.created_at).toLocaleString()} · {(upload.file_size / 1024).toFixed(0)} KB
         </Typography>
 
-        {detected && !detected.error && (
+        {fileCheck && (
+          <Alert severity={fileCheck.severity} sx={{ mt: 1 }}>
+            {fileCheck.text}
+          </Alert>
+        )}
+
+        {detected?.courseCodes && (
           <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 1 }}>
             <Typography variant="body2">Azure found:</Typography>
             {[...detected.courseCodes, ...detected.terms].map((value) => (

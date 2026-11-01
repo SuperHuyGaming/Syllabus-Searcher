@@ -16,11 +16,11 @@ Goal: an admin can trust what students upload, review it without risk, and every
 
 A file can start with `%PDF-` and still carry JavaScript, auto-run actions or embedded files.
 
-- [ ] Parse each upload with a PDF library (e.g. `pdf-lib` or `pdfjs-dist`) and reject files that don't parse, are encrypted, or have more than ~50 pages.
-- [ ] Reject or strip risky features: `/JavaScript`, `/JS`, `/OpenAction`, `/AA`, `/Launch`, `/EmbeddedFile`, `/RichMedia`, `/XFA`.
-- [ ] Sanitize before storing: re-save the PDF from its page content only (or flatten with qpdf/Ghostscript) so the stored file is a rebuilt copy, not the student's original bytes.
+- [x] Parse each upload with `pdf-lib` (`api/src/lib/pdfcheck.js`) and reject files that don't parse, are encrypted, have no pages or more than 50.
+- [x] Strip risky features: `/JavaScript`, `/JS`, `/OpenAction`, `/AA`, `/Launch` and other non-link actions, `/EmbeddedFile`, `/RichMedia`, `/XFA`, attachment and media annotations. Web links and page jumps are kept.
+- [x] Sanitize before storing: the pages are copied into a new PDF, so the stored file is a rebuilt copy, not the student's original bytes. All 133 PDFs on staging pass the check unchanged.
 - [ ] Virus scan. Options: ClamAV in a container for local Docker; for AWS, a scan step that stays in the free tier. Avoid VirusTotal for this, since files sent there become visible to its other users.
-- [ ] Show the scan result on the admin card (clean / stripped N items / rejected and why).
+- [x] Show the check result on the admin card (clean / removed items). Rejected files never reach the queue; the student sees why. Stored in `uploads.detected.fileCheck`, so no schema change.
 
 ### 2. View the PDF inside the admin page
 
