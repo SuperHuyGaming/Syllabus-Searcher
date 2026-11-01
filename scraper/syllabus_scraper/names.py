@@ -33,6 +33,11 @@ def plain(text):
     return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn").lower()
 
 
+def fold(text):
+    """Strips accents one character at a time, so positions in the result match `text`."""
+    return "".join((plain(c) or c)[0] if c.strip() else c for c in text)
+
+
 def is_name_word(word):
     """'David', 'I.', 'Sara-Lynn' yes; 'ENGR', 'Office', 'email' no."""
     bare = word.rstrip(".")
@@ -105,11 +110,12 @@ def full_name(listed, text):
     if not last:
         return None
     window = text[:WINDOW]
-    pattern = r"[\s\-]+".join(re.escape(part) for part in re.split(r"[\s\-]+", last))
+    pattern = r"[\s\-]+".join(re.escape(fold(part)) for part in re.split(r"[\s\-]+", last))
     best = None
 
-    for match in re.finditer(rf"(?<![{LETTER}])({pattern})(?![a-zà-ÿ])", window, re.I):
-        found = match.group(1)
+    # Match on an accent-free copy so "Gonzalez" finds "González", then read the original.
+    for match in re.finditer(rf"(?<![{LETTER}])({pattern})(?![a-z])", fold(window), re.I):
+        found = window[match.start(1): match.end(1)]
         if not found[0].isupper():
             continue
         before = _words_before(window[: match.start()])

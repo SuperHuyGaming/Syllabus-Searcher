@@ -33,3 +33,9 @@ def test_which_names_need_a_first_name():
     assert needs_full_name("Gonzalez")
     assert not needs_full_name("Zhu, Ziwei")
     assert not needs_full_name("All Instructors")
+
+
+def test_listing_without_accents_matches_accented_name():
+    text = "Sections: DL1, DL2 Instructor: Ana Loreto González Hernández Email: loreto@gmu.edu"
+    assert full_name("Gonzalez", text) == "González Hernández, Ana"
+    assert full_name("González, A", text) == "González, Ana"
