@@ -1,3 +1,4 @@
+const { PDFDocument } = require('pdf-lib');
 const { createApp } = require('../src/app');
 
 const PDF = Buffer.from('%PDF-1.7\nfake syllabus');
@@ -151,14 +152,34 @@ describe('catalog routes', () => {
 describe('uploads', () => {
   const query = { course: 'CS 310', term: 'Fall 2024', section: '001', instructor: 'Ada Lovelace' };
 
+  // Uploads are parsed, so these tests need a real PDF.
+  let realPdf;
+  beforeAll(async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage().drawText('CS 310 Fall 2024');
+    realPdf = Buffer.from(await doc.save());
+  });
+
   test('stores a valid PDF as pending', async () => {
     const deps = fakes();
-    const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: PDF }));
+    const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: realPdf }));
     expect(res.statusCode).toBe(201);
     expect(deps.files.save).toHaveBeenCalledWith('pending', expect.any(Buffer), expect.any(Object));
     expect(deps.uploads.create).toHaveBeenCalledWith(
-      expect.objectContaining({ course_code: 'CS310', term_key: '2024-3', detected: { courseCodes: ['CS310'] } })
+      expect.objectContaining({
+        course_code: 'CS310',
+        term_key: '2024-3',
+        detected: { courseCodes: ['CS310'], fileCheck: { status: 'clean', pages: 1, removed: [] } },
+      })
     );
+  });
+
+  test('refuses a PDF that cannot be read and stores nothing', async () => {
+    const deps = fakes();
+    const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: PDF }));
+    expect(res.statusCode).toBe(422);
+    expect(JSON.parse(res.body).error).toMatch(/couldn't be read/);
+    expect(deps.files.save).not.toHaveBeenCalled();
   });
 
   test('rejects files that are not PDFs or HTML pages', async () => {
@@ -178,7 +199,7 @@ describe('uploads', () => {
       expect.objectContaining({ contentType: 'text/html; charset=utf-8', filename: 'CS310_2024-3_001.html' })
     );
     expect(deps.analyze).not.toHaveBeenCalled();
-    expect(deps.uploads.create).toHaveBeenCalledWith(expect.objectContaining({ detected: null }));
+    expect(deps.uploads.create).toHaveBeenCalledWith(expect.objectContaining({ detected: { fileCheck: { status: 'html' } } }));
   });
 
   test('rejects bad course details', async () => {
@@ -189,7 +210,7 @@ describe('uploads', () => {
   test('rate limits by IP', async () => {
     const deps = fakes();
     deps.catalog.hitRateLimit.mockResolvedValue(false);
-    const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: PDF }));
+    const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: realPdf }));
     expect(res.statusCode).toBe(429);
     expect(deps.files.save).not.toHaveBeenCalled();
   });
@@ -261,6 +282,17 @@ describe('admin', () => {
     deps.files.read.mockResolvedValue({ buffer: Buffer.from('<html></html>'), contentType: 'text/html; charset=utf-8' });
     const res = await createApp(deps)(event('GET', `/api/admin/uploads/${UPLOAD_ID}/file`, { headers: auth('good') }));
     expect(res.headers['Content-Security-Policy']).toMatch(/^sandbox/);
+  });
+
+  test('pending PDFs are served inline, sandboxed and unsniffed', async () => {
+    const deps = fakes();
+    deps.files.read.mockResolvedValue({ buffer: Buffer.from('%PDF-1.7'), filename: 'CS310_2026-3_"001".pdf', contentType: 'application/pdf' });
+    const res = await createApp(deps)(event('GET', `/api/admin/uploads/${UPLOAD_ID}/file`, { headers: auth('good') }));
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['Content-Disposition']).toBe('inline; filename="CS310_2026-3_001.pdf"');
+    expect(res.headers['Content-Security-Policy']).toMatch(/^sandbox/);
+    expect(res.headers['X-Content-Type-Options']).toBe('nosniff');
+    expect(res.headers['Cache-Control']).toBe('no-store');
   });
 
   test('rejecting deletes the pending file', async () => {

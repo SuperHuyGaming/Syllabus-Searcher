@@ -3,6 +3,7 @@ const config = require('../config');
 const { json, HttpError, bodyBuffer, clientIp } = require('../lib/http');
 const { analyzeSyllabus } = require('../lib/azure');
 const { parseDetails } = require('../lib/details');
+const { sanitizePdf, PdfRejected } = require('../lib/pdfcheck');
 
 // What kind of file the body is, by its first bytes: a PDF, or an HTML page
 // (some professors post their syllabus as a web page). Anything else is refused.
@@ -32,23 +33,35 @@ module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus }) => [
         throw new HttpError(429, 'Too many uploads. Try again in an hour.');
       }
 
-      const fileId = await files.save('pending', file, {
+      // A PDF is stored as a rebuilt copy with scripts and attachments removed.
+      let stored = file;
+      let fileCheck = { status: 'html' };
+      if (kind.ext === 'pdf') {
+        try {
+          ({ buffer: stored, check: fileCheck } = await sanitizePdf(file));
+        } catch (err) {
+          if (err instanceof PdfRejected) throw new HttpError(422, err.message);
+          throw err;
+        }
+      }
+
+      const fileId = await files.save('pending', stored, {
         filename: `${details.code}_${details.term.key}_${details.section}.${kind.ext}`,
         contentType: kind.type,
         metadata: { course: details.code, termKey: details.term.key, section: details.section },
       });
 
       // Azure reads PDFs only; an HTML page is reviewed by eye.
-      const detected = kind.ext === 'pdf' ? await analyze(file) : null;
+      const found = kind.ext === 'pdf' ? await analyze(stored) : null;
       const row = await uploads.create({
         course_code: details.code,
         term_key: details.term.key,
         section: details.section,
         instructor: details.instructor,
         file_id: fileId,
-        file_size: file.length,
+        file_size: stored.length,
         uploader_ip_hash: ipHash,
-        detected,
+        detected: { ...found, fileCheck },
       });
 
       return json(201, { id: row.id, status: row.status });

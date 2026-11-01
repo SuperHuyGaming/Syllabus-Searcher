@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -24,10 +24,13 @@ import { api, syllabusUrl } from '../api';
 import { supabase } from '../supabase';
 import { groupByTerm, recentTerms, termLabel } from '../lib/terms';
 import { displayCourse } from '../lib/courses';
+import { fileCheckMessage } from '../lib/filecheck';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
 
 // Admins may need to fix syllabi older than the upload form's Fall 2022 cutoff.
 const ADMIN_TERMS = recentTerms(new Date(), '2015-1');
+// pdf.js is large, so it's only downloaded when an admin opens a PDF.
+const PdfViewer = lazy(() => import('../components/PdfViewer'));
 
 export default function Admin() {
   const [session, setSession] = useState(null);
@@ -224,6 +227,8 @@ function UploadCard({ upload, token }) {
   });
   const [note, setNote] = useState('');
   const [htmlPreview, setHtmlPreview] = useState(null);
+  const [pdfData, setPdfData] = useState(null);
+  const [openError, setOpenError] = useState(null);
   const done = () => {
     queryClient.invalidateQueries({ queryKey: ['pending'] });
     queryClient.invalidateQueries({ queryKey: ['course'] });
@@ -233,20 +238,23 @@ function UploadCard({ upload, token }) {
   const reject = useMutation({ mutationFn: () => api.reject(upload.id, note, token), onSuccess: done });
   const failure = approve.error || reject.error;
 
-  // The file needs the admin token, so fetch it rather than linking to it.
-  // A PDF opens in the browser's viewer. An HTML page is untrusted: opened as a blob
-  // it would run on this site with the admin signed in, so it's shown in a sandboxed
-  // frame instead (no scripts, no access to this page).
+  // The file needs the admin token, so fetch it rather than linking to it. Both kinds
+  // are shown on this page: a PDF is drawn by pdf.js (see PdfViewer), and an HTML page,
+  // which would run on this site with the admin signed in if opened as a blob, goes in
+  // a sandboxed frame (no scripts, no access to this page).
   async function openFile() {
-    const blob = await api.pendingFile(upload.id, token);
-    if (blob.type.startsWith('text/html')) {
-      setHtmlPreview(await blob.text());
-      return;
+    setOpenError(null);
+    try {
+      const blob = await api.pendingFile(upload.id, token);
+      if (blob.type.startsWith('text/html')) setHtmlPreview(await blob.text());
+      else setPdfData(await blob.arrayBuffer());
+    } catch (err) {
+      setOpenError(err.message);
     }
-    window.open(URL.createObjectURL(blob), '_blank', 'noopener');
   }
 
   const detected = upload.detected;
+  const fileCheck = fileCheckMessage(detected?.fileCheck);
   return (
     <Card variant="outlined">
       <CardContent>
@@ -258,7 +266,13 @@ function UploadCard({ upload, token }) {
           Uploaded {new Date(upload.created_at).toLocaleString()} · {(upload.file_size / 1024).toFixed(0)} KB
         </Typography>
 
-        {detected && !detected.error && (
+        {fileCheck && (
+          <Alert severity={fileCheck.severity} sx={{ mt: 1 }}>
+            {fileCheck.text}
+          </Alert>
+        )}
+
+        {detected?.courseCodes && (
           <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 1 }}>
             <Typography variant="body2">Azure found:</Typography>
             {[...detected.courseCodes, ...detected.terms].map((value) => (
@@ -268,7 +282,7 @@ function UploadCard({ upload, token }) {
         )}
 
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Open the PDF and fix anything that doesn&apos;t match before approving.
+          View the file and fix anything that doesn&apos;t match before approving.
         </Typography>
         <DetailFields form={form} setForm={setForm} />
         <TextField
@@ -279,14 +293,14 @@ function UploadCard({ upload, token }) {
           fullWidth
           sx={{ mt: 2 }}
         />
-        {failure && (
+        {(failure || openError) && (
           <Alert severity="error" sx={{ mt: 1 }}>
-            {failure.message}
+            {failure?.message || openError}
           </Alert>
         )}
       </CardContent>
       <CardActions>
-        <Button onClick={openFile}>Open file</Button>
+        <Button onClick={openFile}>View file</Button>
         <Button variant="contained" onClick={() => approve.mutate()} loading={approve.isPending}>
           Approve
         </Button>
@@ -306,6 +320,17 @@ function UploadCard({ upload, token }) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHtmlPreview(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={pdfData !== null} onClose={() => setPdfData(null)} fullWidth maxWidth="xl">
+        <DialogTitle>PDF preview (scripts and links off)</DialogTitle>
+        <DialogContent dividers sx={{ height: '80vh' }}>
+          <Suspense fallback={<Typography>Loading viewer…</Typography>}>
+            {pdfData && <PdfViewer data={pdfData} />}
+          </Suspense>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPdfData(null)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Card>
