@@ -24,3 +24,6 @@ create index if not exists uploads_pending_idx on public.uploads (created_at) wh
 -- Only the API (service role key) touches this table. With RLS on and no policies,
 -- the public anon key used by the browser can't read or write it.
 alter table public.uploads enable row level security;
+
+-- Needed when "Automatically expose new tables" is off: only the service role gets access.
+grant select, insert, update, delete on public.uploads to service_role;
