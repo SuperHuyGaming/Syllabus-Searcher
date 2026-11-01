@@ -284,6 +284,17 @@ describe('admin', () => {
     expect(res.headers['Content-Security-Policy']).toMatch(/^sandbox/);
   });
 
+  test('pending PDFs are served inline, sandboxed and unsniffed', async () => {
+    const deps = fakes();
+    deps.files.read.mockResolvedValue({ buffer: Buffer.from('%PDF-1.7'), filename: 'CS310_2026-3_"001".pdf', contentType: 'application/pdf' });
+    const res = await createApp(deps)(event('GET', `/api/admin/uploads/${UPLOAD_ID}/file`, { headers: auth('good') }));
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['Content-Disposition']).toBe('inline; filename="CS310_2026-3_001.pdf"');
+    expect(res.headers['Content-Security-Policy']).toMatch(/^sandbox/);
+    expect(res.headers['X-Content-Type-Options']).toBe('nosniff');
+    expect(res.headers['Cache-Control']).toBe('no-store');
+  });
+
   test('rejecting deletes the pending file', async () => {
     const deps = fakes();
     const res = await createApp(deps)(

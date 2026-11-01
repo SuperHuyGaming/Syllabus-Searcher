@@ -20,5 +20,8 @@ export default defineConfig({
     command: 'npm run build && npm run preview -- --port 4173 --strictPort',
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
+    // A placeholder project, so the admin page loads. Tests seed the session themselves
+    // and nothing is ever sent to this address.
+    env: { VITE_SUPABASE_URL: 'https://e2e.supabase.co', VITE_SUPABASE_ANON_KEY: 'e2e-anon-key' },
   },
 });
