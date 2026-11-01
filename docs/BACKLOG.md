@@ -9,7 +9,7 @@ Goal: an admin can trust what students upload, review it without risk, and every
 - Students upload a missing syllabus from the Upload page (PDF only, under 4 MB, 5 per hour per IP).
 - The API rejects anything that doesn't start with the `%PDF-` header, so renamed `.exe`/`.docx` files never reach the queue.
 - Uploads wait in a separate `pending` GridFS bucket and a Supabase `uploads` row until an admin approves or rejects them.
-- `/admin` is magic-link sign-in, limited to `ADMIN_EMAILS`. "Open PDF" fetches the file with the admin token and opens it in the browser's PDF viewer (not a download).
+- `/admin` is magic-link sign-in, limited to `ADMIN_EMAILS`. "View file" fetches the file with the admin token and shows it on the page (PDFs drawn by pdf.js, HTML in a sandboxed frame).
 - With Azure Document Intelligence keys set, the reviewer sees course codes and terms detected in the PDF.
 
 ### 1. Make uploaded PDFs safe to open
@@ -24,9 +24,9 @@ A file can start with `%PDF-` and still carry JavaScript, auto-run actions or em
 
 ### 2. View the PDF inside the admin page
 
-- [ ] Render the pending PDF on the review card with pdf.js (canvas rendering, scripts off) instead of opening a new tab, so nothing is handed to the OS or a desktop PDF reader.
-- [ ] Serve the admin file response with `Content-Disposition: inline`, `X-Content-Type-Options: nosniff` and a `sandbox` CSP, matching how public syllabi are served.
-- [ ] Page through the PDF, zoom, and see the extracted text next to it.
+- [x] Render the pending PDF on the review card with pdf.js (canvas rendering, scripts off) instead of opening a new tab, so nothing is handed to the OS or a desktop PDF reader. `client/src/components/PdfViewer.jsx`, loaded only when an admin opens a PDF. Links, form fields and other annotations are not drawn.
+- [x] Serve the admin file response with `Content-Disposition: inline`, `X-Content-Type-Options: nosniff` and a `sandbox` CSP (for every file type, not just HTML).
+- [x] Page through the PDF, zoom, and see the extracted text next to it (a "Text" switch hides it).
 
 ### 3. AI check of each upload
 

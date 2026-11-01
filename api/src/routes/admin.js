@@ -65,8 +65,14 @@ module.exports = ({ catalog, files, uploads, search }) => {
         const upload = await uploads.get(params[0]);
         const file = upload && (await files.read('pending', upload.file_id));
         if (!file) throw new HttpError(404, 'File not found');
-        const sandbox = file.contentType.startsWith('text/html') ? HTML_SANDBOX : {};
-        return binary(file.buffer, file.contentType, { ...NO_STORE, ...sandbox, 'X-Content-Type-Options': 'nosniff' });
+        // The admin page draws the file itself, so it is never meant to run as a page:
+        // any file type gets the sandbox, and it's shown inline rather than saved.
+        return binary(file.buffer, file.contentType, {
+          ...NO_STORE,
+          ...HTML_SANDBOX,
+          'Content-Disposition': `inline; filename="${(file.filename || 'upload').replace(/"/g, '')}"`,
+          'X-Content-Type-Options': 'nosniff',
+        });
       },
     },
     {
