@@ -3,9 +3,10 @@ const { json, binary, HttpError } = require('../lib/http');
 const { normalizeCourse } = require('../lib/terms');
 const { groupByProfessor } = require('../lib/professors');
 
-// Course data changes only when the scraper runs or an upload is approved,
-// so CloudFront can cache it for a while and Lambda rarely runs.
-const CATALOG_CACHE = { 'Cache-Control': 'public, max-age=300, s-maxage=3600' };
+// Browsers re-check every time (max-age=0), so an admin's approve or edit shows up
+// on the next page load. CloudFront shares one copy for up to a minute, which keeps
+// Lambda calls to about one per page per minute.
+const CATALOG_CACHE = { 'Cache-Control': 'public, max-age=0, s-maxage=60' };
 // File ids never get reused, so a syllabus file can be cached forever.
 const FILE_CACHE = { 'Cache-Control': 'public, max-age=31536000, immutable' };
 // Scraped HTML syllabi are untrusted: sandbox them so their scripts can't run on our domain.
