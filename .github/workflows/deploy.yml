@@ -56,10 +56,23 @@ jobs:
       - name: Check secrets
         id: check
         env:
-          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+          ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
+          IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
         run: |
-          if [ -z "$AWS_KEY" ]; then
-            echo "::notice::No secrets in the '${{ needs.target.outputs.environment }}' environment yet, so nothing was deployed. See docs/DEPLOY.md."
+          # Deploy only once every required secret is set (Azure ones are optional).
+          missing=""
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY MONGODB_URI SUPABASE_URL SUPABASE_ANON_KEY                       SUPABASE_SERVICE_ROLE_KEY ADMIN_EMAILS ORIGIN_SECRET IP_HASH_SALT; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice::The '${{ needs.target.outputs.environment }}' environment is missing:$missing. Nothing was deployed; see docs/DEPLOY.md."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
