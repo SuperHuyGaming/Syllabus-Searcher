@@ -21,6 +21,24 @@ const cs310 = {
 
 const professors = [
   {
+    name: 'Gonzalez Samudio, David',
+    slug: 'gonzalez-samudio-david',
+    courses: ['CS211'],
+    offerings: [
+      {
+        termKey: '2024-1',
+        termLabel: 'Spring 2024',
+        section: 'ALL',
+        code: 'CS211',
+        display: 'CS 211',
+        title: 'Object-Oriented Programming',
+        fileId: FILE_B,
+        source: 'gmu-cs',
+        coInstructors: ['Hrolenok, Brian'],
+      },
+    ],
+  },
+  {
     name: 'Masri, W',
     slug: 'masri-w',
     courses: ['CS310'],

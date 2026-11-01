@@ -10,10 +10,11 @@ from datetime import datetime, timezone
 
 import boto3
 import gridfs
-from boto3.dynamodb.conditions import Attr
+from boto3.dynamodb.conditions import Attr, Key
 from bson import ObjectId
 from pymongo import MongoClient
 
+from .names import full_name, needs_full_name
 from .text import extract_text
 
 log = logging.getLogger("scraper")
@@ -39,6 +40,20 @@ class Store:
             endpoint_url=os.environ.get("DYNAMODB_ENDPOINT") or None,
         )
         self.table = dynamo.Table(os.environ.get("TABLE_NAME", "SyllabusSearcher"))
+        self._curated = None
+
+    def is_curated(self, source_url):
+        """True if an admin edited or deleted this file on the site; the scraper must not undo that."""
+        if self._curated is None:
+            self._curated = set()
+            kwargs = {"KeyConditionExpression": Key("PK").eq("CURATED"), "ProjectionExpression": "SK"}
+            while True:
+                page = self.table.query(**kwargs)
+                self._curated.update(item["SK"] for item in page["Items"])
+                if "LastEvaluatedKey" not in page:
+                    break
+                kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+        return source_url in self._curated
 
     def file_for(self, source_url):
         """Returns (file_id, content_type) if this file was already saved, else None."""
@@ -126,4 +141,36 @@ class Store:
             count += 1
             if not text:
                 log.warning("No text in %s (likely a scanned PDF)", file_id)
+        return count
+
+    def resolve_names(self):
+        """Replaces listed names like "Zhu, Z" or "Gonzalez" with the full name from the syllabus
+        ("Zhu, Ziwei"), so students can search by first name. Keeps the listed form in
+        listedInstructors. Skips student uploads and anything an admin fixed by hand.
+        Returns how many offerings changed."""
+        texts = self.db["syllabus_text"]
+        count = 0
+        for file_id, offerings in self.offerings_by_file().items():
+            doc = texts.find_one({"_id": file_id}, {"text": 1})
+            text = (doc or {}).get("text") or ""
+            if not text:
+                continue
+            for offering in offerings:
+                if offering.get("source") == "upload" or self.is_curated(offering.get("sourceUrl", "")):
+                    continue
+                listed = offering.get("listedInstructors") or offering["instructors"]
+                resolved = [(full_name(n, text) if needs_full_name(n) else None) or n for n in listed]
+                if resolved == offering["instructors"]:
+                    continue
+                self.table.update_item(
+                    Key={"PK": offering["PK"], "SK": offering["SK"]},
+                    UpdateExpression="SET instructors = :names, listedInstructors = :listed",
+                    ExpressionAttributeValues={":names": resolved, ":listed": listed},
+                )
+                offering["instructors"] = resolved
+                count += 1
+            texts.update_one(
+                {"_id": file_id},
+                {"$set": {"instructors": list(dict.fromkeys(n for o in offerings for n in o["instructors"]))}},
+            )
         return count

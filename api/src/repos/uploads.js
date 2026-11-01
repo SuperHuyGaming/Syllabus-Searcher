@@ -39,11 +39,12 @@ function createUploads({ supabase } = {}) {
       return unwrap(await sb().from('uploads').select('*').eq('id', id).maybeSingle());
     },
 
-    async review(id, { status, reviewer, note }) {
+    // `changes` holds any course details the admin corrected before approving.
+    async review(id, { status, reviewer, note, changes = {} }) {
       return unwrap(
         await sb()
           .from('uploads')
-          .update({ status, reviewed_by: reviewer, reviewed_at: new Date().toISOString(), note })
+          .update({ ...changes, status, reviewed_by: reviewer, reviewed_at: new Date().toISOString(), note })
           .eq('id', id)
           .eq('status', 'pending')
           .select()

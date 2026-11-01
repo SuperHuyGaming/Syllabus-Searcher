@@ -1,18 +1,31 @@
 import { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, CardActionArea, Grid, InputAdornment, Skeleton, TextField, Typography } from '@mui/material';
+import {
+  Alert,
+  Autocomplete,
+  Box,
+  Card,
+  CardActionArea,
+  Grid,
+  InputAdornment,
+  Skeleton,
+  TextField,
+  Typography,
+} from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { api } from '../api';
+import { matchProfessors } from '../lib/professors';
 
 const display = (code) => code.replace(/^([A-Z]+)/, '$1 ');
 
 export default function Professors() {
   const { data, isPending, error } = useQuery({ queryKey: ['professors'], queryFn: api.professors });
   const [query, setQuery] = useState('');
+  const navigate = useNavigate();
 
-  const q = query.trim().toLowerCase();
-  const professors = (data?.professors || []).filter((p) => !q || p.name.toLowerCase().includes(q));
+  const all = data?.professors || [];
+  const professors = matchProfessors(all, query);
 
   return (
     <>
@@ -23,13 +36,42 @@ export default function Professors() {
         Every CS professor with a syllabus on file, and the courses they&apos;ve taught.
       </Typography>
 
-      <TextField
-        fullWidth
-        autoFocus
-        label="Search by name"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> } }}
+      {/* Type a first or last name; pick a suggestion (click or Enter) to open that professor. */}
+      <Autocomplete
+        freeSolo
+        options={all}
+        filterOptions={(options, { inputValue }) => (inputValue.trim() ? matchProfessors(options, inputValue, 8) : [])}
+        getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
+        inputValue={query}
+        onInputChange={(_, next, reason) => reason !== 'reset' && setQuery(next)}
+        onChange={(_, picked) => picked && typeof picked !== 'string' && navigate(`/professors/${picked.slug}`)}
+        renderOption={({ key, ...props }, option) => (
+          <Box component="li" key={key} {...props} sx={{ display: 'block !important' }}>
+            <Typography sx={{ fontWeight: 700 }}>{option.name}</Typography>
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {option.courses.map(display).join(', ')}
+            </Typography>
+          </Box>
+        )}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            autoFocus
+            label="Search by first or last name"
+            placeholder="e.g. Ziwei, Zhu, or David Gonzalez"
+            slotProps={{
+              ...params.slotProps,
+              input: {
+                ...(params.slotProps?.input ?? params.InputProps),
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        )}
         sx={{ mb: 3 }}
       />
 

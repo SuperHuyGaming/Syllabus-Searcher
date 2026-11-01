@@ -50,15 +50,17 @@ When an upload is approved (and once, as a backfill, for scraped syllabi):
 - [ ] Optional: a course-level rollup ("across all professors, CS 310 usually covers...").
 - [ ] Let the admin edit or regenerate a summary.
 
-### 5. Catch wrong course codes and fix published syllabi
+### 5. Catch wrong course codes and fix published syllabi (done)
 
-Found in testing: a CS 584 syllabus was uploaded as CS 580, approved, and landed on the wrong course page. It had to be moved by hand in the database.
+Found in testing: a CS 584 syllabus was uploaded as CS 580, approved, and landed on the wrong course page.
 
-- [ ] Upload form: as the student types the course code, show the course title ("CS 580 · Introduction to Artificial Intelligence") so a typo is obvious. Pick from a list of known courses instead of free text.
-- [ ] Admin card: show the course title next to the code, and let the admin edit course, term, section and instructor before approving.
-- [ ] Instructor names: suggest existing professors for the course ("Zhu, Z") so "Zhu, Ziwei" doesn't become a separate professor; store names in the scraped "Last, F" format.
-- [ ] Admin "Published" tab: edit or unpublish an approved syllabus (move it to another course, delete it).
+- [x] Upload form: course picker that shows the course title ("CS 580 · Introduction to Artificial Intelligence") and warns about codes not on the site.
+- [x] Admin review: edit course, term, section and professor before approving; the course title is shown.
+- [x] Instructor names: the upload form suggests professors already listed for the course.
+- [x] Admin "Published syllabi" tab: move, edit or delete any syllabus, scraped or uploaded. Fixes to scraped files are recorded (`PK=CURATED`) so the weekly scrape doesn't undo them.
+- [x] Full professor names: the scraper reads "Zhu, Ziwei" out of the syllabus text when the listing only says "Zhu, Z" or "Gonzalez".
 - [ ] The AI check (item 3) also compares the course code in the PDF with the one entered.
+- [ ] Merge two spellings of one professor in one step (today: edit each syllabus). Known case: "Gonzalez Hernandez, A" and "González, Ana".
 
 ### Free AI options
 

@@ -60,9 +60,30 @@ test('professor name on a course links to their page', async ({ page }) => {
 
 test('search professors by name', async ({ page }) => {
   await page.goto('/professors');
-  await page.getByLabel('Search by name').fill('mas');
+  await page.getByRole('combobox', { name: 'Search by first or last name' }).fill('mas');
   await expect(page.getByRole('link', { name: /Masri, W/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /Russell, K/ })).toHaveCount(0);
+});
+
+test('find a professor by first name and open them from the suggestions', async ({ page }) => {
+  await page.goto('/professors');
+  const search = page.getByRole('combobox', { name: 'Search by first or last name' });
+  await search.fill('david');
+  const option = page.getByRole('option', { name: /Gonzalez Samudio, David/ });
+  await expect(option).toContainText('CS 211');
+  await option.hover();
+  await option.click();
+  await expect(page).toHaveURL(/\/professors\/gonzalez-samudio-david$/);
+  await expect(page.getByRole('heading', { name: 'Gonzalez Samudio, David' })).toBeVisible();
+});
+
+test('search by second surname and pick with the keyboard', async ({ page }) => {
+  await page.goto('/professors');
+  const search = page.getByRole('combobox', { name: 'Search by first or last name' });
+  await search.fill('samudio');
+  await search.press('ArrowDown');
+  await search.press('Enter');
+  await expect(page).toHaveURL(/\/professors\/gonzalez-samudio-david$/);
 });
 
 test('unknown pages show not found', async ({ page }) => {

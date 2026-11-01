@@ -86,6 +86,9 @@ def save_row(store, fetcher, timestamp, row, codes):
     """Downloads the file if it's new and writes the offering. Returns True if a new file was saved,
     False if it already existed, None if it was skipped."""
     source_url = f"{sources.SITE}{path_of(row.href)}"
+    if store.is_curated(source_url):
+        log.info("Kept admin's version of %s", source_url)
+        return False
     existing = store.file_for(source_url)
     if existing:
         file_id, content_type = existing
@@ -165,6 +168,7 @@ def main(argv=None):
         log.info("Done: %d rows, %d new files, %d skipped", counts["rows"], counts["saved"], counts["skipped"])
     if store:
         log.info("Made %d syllabi searchable", store.index_text(reindex=args.reindex))
+        log.info("Filled in full professor names on %d syllabi", store.resolve_names())
     return 0
 
 

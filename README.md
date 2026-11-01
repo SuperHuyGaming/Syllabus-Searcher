@@ -3,9 +3,10 @@
 Look up a GMU Computer Science course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed.
 
 - **By course**: search a code or title, then filter by term and professor.
-- **By professor**: every course and term a professor has a syllabus for.
+- **By professor**: search by first or last name ("Ziwei", "Zhu", "David Gonzalez") and see every course and term they have a syllabus for. Full names are read from the syllabi when the department listing only gives an initial.
 - **Inside syllabi**: full-text search for a language, textbook or policy (`Python`, `"late policy"`), with highlighted snippets.
 - **Uploads**: students can add missing syllabi; an admin approves them before they show up.
+- **Admin fixes**: at `/admin`, correct an upload's course, term, section or professor before approving, and move, edit or delete any published syllabus. Fixes to scraped syllabi survive the weekly re-scrape.
 
 ## How it fits together
 
@@ -56,7 +57,7 @@ Without Supabase keys, searching and viewing syllabi work, but uploads and `/adm
 
 1. Create a project at supabase.com.
 2. In the SQL editor, run `infra/supabase/schema.sql`.
-3. Under Authentication → Users, add your own email (the admin page only signs in existing users).
+3. Under Authentication → Users, add your own email with a password (the admin page only signs in existing users; it signs in with email and password, or an emailed link if you forget it).
 4. Copy the project URL, anon key and service role key into `.env`, and set `ADMIN_EMAILS` to your email.
 5. Rebuild so the website picks up the keys: `docker compose up -d --build`.
 6. In Supabase, Authentication → URL Configuration, add `http://localhost:8080/admin` as a redirect URL.

@@ -28,6 +28,23 @@ function groupByProfessor(offerings) {
     }
   }
 
+  const merge = (slug, into) => {
+    into.offerings.push(...byName.get(slug).offerings);
+    byName.delete(slug);
+  };
+
+  // "Zhu, Z" (a syllabus whose text didn't spell the name out) joins "Zhu, Ziwei"
+  // when that's the only full name with the same surname and initial.
+  for (const [slug, professor] of byName) {
+    const [last, first = ''] = professor.name.split(',').map((part) => plain(part.trim()));
+    if (first.replace('.', '').length !== 1) continue;
+    const matches = [...byName.values()].filter((p) => {
+      const [otherLast, otherFirst = ''] = p.name.split(',').map((part) => plain(part.trim()));
+      return otherLast === last && otherFirst.length > 1 && otherFirst.startsWith(first[0]);
+    });
+    if (matches.length === 1) merge(slug, matches[0]);
+  }
+
   // "Abdelmoumin" (from a multi-instructor row) joins "Abdelmoumin, G" when that's
   // the only professor with the surname. With two ("Chen, J" and "Chen, S") it stays apart.
   for (const [slug, professor] of byName) {

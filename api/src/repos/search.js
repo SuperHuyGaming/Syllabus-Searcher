@@ -59,6 +59,30 @@ function createSearch({ db } = {}) {
         score: Math.round(score * 100) / 100,
       }));
     },
+
+    // After an admin edit, copies the file's new course details onto its search entry
+    // (same fields as the scraper's index_text). The extracted text stays as it was.
+    async refresh(fileId, offerings) {
+      const collection = (await database()).collection('syllabus_text');
+      if (offerings.length === 0) {
+        await collection.deleteOne({ _id: fileId });
+        return;
+      }
+      const [first] = offerings;
+      await collection.updateOne(
+        { _id: fileId },
+        {
+          $set: {
+            codes: [...new Set(offerings.map((o) => o.code))].sort(),
+            title: first.title,
+            termKey: first.termKey,
+            termLabel: first.termLabel,
+            section: first.section,
+            instructors: [...new Set(offerings.flatMap((o) => o.instructors))],
+          },
+        }
+      );
+    },
   };
 }
 

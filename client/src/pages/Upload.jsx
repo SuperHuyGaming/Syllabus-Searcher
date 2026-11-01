@@ -5,6 +5,7 @@ import { Alert, Button, MenuItem, Paper, Stack, TextField, Typography } from '@m
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { api } from '../api';
 import { recentTerms } from '../lib/terms';
+import { CourseField, ProfessorField } from '../components/CourseFields';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const TERMS = recentTerms();
@@ -55,7 +56,7 @@ export default function Upload() {
       </Typography>
 
       <Stack spacing={2}>
-        <TextField label="Course code" placeholder="CS 310" value={form.course} onChange={set('course')} required />
+        <CourseField value={form.course} onChange={(course) => setForm((f) => ({ ...f, course }))} required />
         <TextField select label="Term" value={form.term} onChange={set('term')} required>
           {TERMS.map((t) => (
             <MenuItem key={t.key} value={t.label}>
@@ -64,11 +65,10 @@ export default function Upload() {
           ))}
         </TextField>
         <TextField label="Section" placeholder="001" value={form.section} onChange={set('section')} required />
-        <TextField
-          label="Professor"
-          placeholder="Last, First"
+        <ProfessorField
+          course={form.course}
           value={form.instructor}
-          onChange={set('instructor')}
+          onChange={(instructor) => setForm((f) => ({ ...f, instructor }))}
           required
         />
         <Button component="label" variant="outlined" startIcon={<UploadFileIcon />} sx={{ justifyContent: 'flex-start' }}>

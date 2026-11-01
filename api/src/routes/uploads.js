@@ -1,30 +1,8 @@
 const crypto = require('node:crypto');
 const config = require('../config');
 const { json, HttpError, bodyBuffer, clientIp } = require('../lib/http');
-const { parseTerm, normalizeCourse } = require('../lib/terms');
 const { analyzeSyllabus } = require('../lib/azure');
-
-const SECTION = /^[A-Za-z0-9 ,-]{1,20}$/;
-const INSTRUCTOR = /^[\p{L} .,'-]{2,80}$/u;
-
-function validate(query) {
-  const code = normalizeCourse(query.course);
-  if (!code) throw new HttpError(400, 'Course code should look like "CS 310"');
-  const dept = code.match(/^[A-Z]+/)[0];
-  if (!config.departments.includes(dept)) throw new HttpError(400, `Only ${config.departments.join(', ')} courses for now`);
-
-  const term = parseTerm(query.term);
-  const thisYear = new Date().getFullYear();
-  if (!term || term.year < 2000 || term.year > thisYear + 1) throw new HttpError(400, 'Term should look like "Fall 2024"');
-
-  const section = String(query.section || '').trim();
-  if (!SECTION.test(section)) throw new HttpError(400, 'Section should look like "001"');
-
-  const instructor = String(query.instructor || '').trim();
-  if (!INSTRUCTOR.test(instructor)) throw new HttpError(400, 'Enter the instructor name');
-
-  return { code, term, section, instructor };
-}
+const { parseDetails } = require('../lib/details');
 
 module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus }) => [
   {
@@ -32,7 +10,7 @@ module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus }) => [
     method: 'POST',
     path: /^\/api\/uploads$/,
     async handler({ event, query }) {
-      const details = validate(query);
+      const details = parseDetails(query);
 
       const pdf = bodyBuffer(event);
       if (pdf.length === 0) throw new HttpError(400, 'Attach a PDF');

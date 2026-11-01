@@ -49,4 +49,23 @@ describe('professors', () => {
     ]).map((p) => p.name);
     expect(names).toEqual(['Chen', 'Chen, J', 'Chen, S']);
   });
+
+  test('merges "Surname, Initial" into the one matching full name', () => {
+    const professors = groupByProfessor([
+      offering('CS584', '2024-3', ['Zhu, Ziwei']),
+      offering('CS584', '2026-3', ['Zhu, Z']),
+      offering('CS484', '2023-1', ['Zhu']),
+    ]);
+    expect(professors.map((p) => p.name)).toEqual(['Zhu, Ziwei']);
+    expect(professors[0].offerings).toHaveLength(3);
+  });
+
+  test('keeps an initial apart when two full names could match', () => {
+    const names = groupByProfessor([
+      offering('CS100', '2023-1', ['Chen, Jim']),
+      offering('CS101', '2023-1', ['Chen, Jun']),
+      offering('CS102', '2023-1', ['Chen, J']),
+    ]).map((p) => p.name);
+    expect(names).toEqual(['Chen, J', 'Chen, Jim', 'Chen, Jun']);
+  });
 });

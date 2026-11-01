@@ -3,6 +3,19 @@ const { createApp } = require('../src/app');
 const PDF = Buffer.from('%PDF-1.7\nfake syllabus');
 const UPLOAD_ID = '11111111-2222-3333-4444-555555555555';
 const FILE_ID = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+const OFFERING = {
+  PK: 'COURSE#CS580',
+  SK: `TERM#2024-3#SEC#001#${FILE_ID}`,
+  code: 'CS580',
+  title: 'Introduction to Artificial Intelligence',
+  termKey: '2024-3',
+  termLabel: 'Fall 2024',
+  section: '001',
+  instructors: ['Zhu, Z'],
+  fileId: FILE_ID,
+  source: 'gmu-cs',
+  sourceUrl: 'https://cs.gmu.edu/media/syllabi/Fall2024/CS_580ZhuZ001.pdf',
+};
 
 function event(method, path, { query, body, headers } = {}) {
   return {
@@ -36,6 +49,12 @@ function fakes() {
       ),
       getCourseMeta: jest.fn().mockResolvedValue({ title: 'Data Structures' }),
       putOffering: jest.fn().mockResolvedValue(),
+      getOffering: jest.fn(async (code, id) => (code === 'CS580' && id === OFFERING.SK ? { ...OFFERING } : null)),
+      offeringsForFile: jest.fn().mockResolvedValue([]),
+      updateOffering: jest.fn(async (old, next) => ({ ...old, PK: `COURSE#${next.code}`, SK: 'TERM#new', code: next.code })),
+      deleteOffering: jest.fn().mockResolvedValue(),
+      putCourse: jest.fn().mockResolvedValue(),
+      markCurated: jest.fn().mockResolvedValue(),
       hitRateLimit: jest.fn().mockResolvedValue(true),
       ping: jest.fn().mockResolvedValue(),
     },
@@ -55,6 +74,7 @@ function fakes() {
       ping: jest.fn().mockResolvedValue(),
     },
     analyze: jest.fn().mockResolvedValue({ courseCodes: ['CS310'] }),
+    search: { search: jest.fn(), refresh: jest.fn().mockResolvedValue() },
   };
 }
 
@@ -181,6 +201,31 @@ describe('admin', () => {
     expect(deps.uploads.review).toHaveBeenCalledWith(UPLOAD_ID, { status: 'approved', reviewer: 'admin@gmu.edu' });
   });
 
+  test('approving can correct the details the student entered', async () => {
+    const deps = fakes();
+    const body = JSON.stringify({ course: 'cs 584', term: 'Fall 2026', section: '004', instructor: 'Zhu, Z' });
+    const res = await createApp(deps)(
+      event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good'), body })
+    );
+    expect(res.statusCode).toBe(200);
+    expect(deps.catalog.putOffering).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'CS584', section: '004', instructors: ['Zhu, Z'], term: expect.objectContaining({ key: '2026-3' }) })
+    );
+    expect(deps.uploads.review).toHaveBeenCalledWith(
+      UPLOAD_ID,
+      expect.objectContaining({ changes: { course_code: 'CS584', term_key: '2026-3', section: '004', instructor: 'Zhu, Z' } })
+    );
+  });
+
+  test('approving rejects invalid corrections before publishing', async () => {
+    const deps = fakes();
+    const res = await createApp(deps)(
+      event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good'), body: '{"course":"MATH 213"}' })
+    );
+    expect(res.statusCode).toBe(400);
+    expect(deps.files.move).not.toHaveBeenCalled();
+  });
+
   test('a new course needs a title before approval', async () => {
     const deps = fakes();
     deps.catalog.getCourseMeta.mockResolvedValue(null);
@@ -196,6 +241,71 @@ describe('admin', () => {
     );
     expect(res.statusCode).toBe(200);
     expect(deps.files.remove).toHaveBeenCalledWith('pending', FILE_ID);
+  });
+});
+
+describe('admin fixes to published syllabi', () => {
+  const auth = { authorization: 'Bearer good' };
+  const post = (path, body, headers = auth) => event('POST', path, { headers, body: JSON.stringify(body) });
+
+  test('need a signed-in admin', async () => {
+    const deps = fakes();
+    const app = createApp(deps);
+    expect((await app(post('/api/admin/offerings/update', { code: 'CS580', id: OFFERING.SK }, {}))).statusCode).toBe(401);
+    expect((await app(post('/api/admin/offerings/delete', { code: 'CS580', id: OFFERING.SK }, {}))).statusCode).toBe(401);
+    expect((await app(event('GET', '/api/admin/courses/CS310'))).statusCode).toBe(401);
+    expect(deps.catalog.deleteOffering).not.toHaveBeenCalled();
+  });
+
+  test('lists a course without caching', async () => {
+    const res = await createApp(fakes())(event('GET', '/api/admin/courses/CS%20310', { headers: auth }));
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['Cache-Control']).toBe('no-store');
+  });
+
+  test('moves a syllabus to another course and remembers the fix', async () => {
+    const deps = fakes();
+    deps.catalog.getCourseMeta.mockResolvedValue({ title: 'Data Mining' });
+    const res = await createApp(deps)(
+      post('/api/admin/offerings/update', { code: 'CS580', id: OFFERING.SK, course: 'CS 584', instructors: 'Zhu, Z; Yu, F' })
+    );
+    expect(res.statusCode).toBe(200);
+    expect(deps.catalog.updateOffering).toHaveBeenCalledWith(
+      expect.objectContaining({ SK: OFFERING.SK }),
+      expect.objectContaining({ code: 'CS584', title: 'Data Mining', section: '001', instructors: ['Zhu, Z', 'Yu, F'] })
+    );
+    expect(deps.catalog.markCurated).toHaveBeenCalledWith(OFFERING.sourceUrl, { action: 'edited', by: 'admin@gmu.edu' });
+    expect(deps.search.refresh).toHaveBeenCalledWith(FILE_ID, []);
+  });
+
+  test('moving to a course not on the site needs a title', async () => {
+    const deps = fakes();
+    deps.catalog.getCourseMeta.mockResolvedValue(null);
+    const res = await createApp(deps)(post('/api/admin/offerings/update', { code: 'CS580', id: OFFERING.SK, course: 'CS 799' }));
+    expect(res.statusCode).toBe(400);
+    expect(deps.catalog.updateOffering).not.toHaveBeenCalled();
+  });
+
+  test('404s for a syllabus that does not exist', async () => {
+    const res = await createApp(fakes())(post('/api/admin/offerings/update', { code: 'CS580', id: 'TERM#nope' }));
+    expect(res.statusCode).toBe(404);
+  });
+
+  test('deleting removes the file once nothing points at it', async () => {
+    const deps = fakes();
+    const res = await createApp(deps)(post('/api/admin/offerings/delete', { code: 'CS580', id: OFFERING.SK }));
+    expect(res.statusCode).toBe(200);
+    expect(deps.catalog.markCurated).toHaveBeenCalledWith(OFFERING.sourceUrl, { action: 'deleted', by: 'admin@gmu.edu' });
+    expect(deps.catalog.deleteOffering).toHaveBeenCalledWith(expect.objectContaining({ SK: OFFERING.SK }));
+    expect(deps.files.remove).toHaveBeenCalledWith('syllabi', FILE_ID);
+  });
+
+  test('deleting keeps a file another course still uses', async () => {
+    const deps = fakes();
+    deps.catalog.offeringsForFile.mockResolvedValue([{ ...OFFERING, code: 'CS584' }]);
+    const res = await createApp(deps)(post('/api/admin/offerings/delete', { code: 'CS580', id: OFFERING.SK }));
+    expect(parse(res)).toEqual({ deleted: true, fileDeleted: false });
+    expect(deps.files.remove).not.toHaveBeenCalled();
   });
 });
 
