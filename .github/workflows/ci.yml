@@ -42,7 +42,7 @@ jobs:
       - run: npm run test:e2e
 
   scraper:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright 1.52 installs Chromium on 24.04, not 26.04
     defaults:
       run:
         working-directory: scraper

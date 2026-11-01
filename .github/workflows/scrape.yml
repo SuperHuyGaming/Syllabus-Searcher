@@ -13,7 +13,7 @@ on:
 
 jobs:
   scrape:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright 1.52 installs Chromium on 24.04, not 26.04
     steps:
       - name: Check secrets
         id: check
