@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Autocomplete, TextField } from '@mui/material';
+import { Autocomplete, Box, Chip, Stack, TextField, Typography } from '@mui/material';
 import { api } from '../api';
 import { displayCourse, normalizeCourse } from '../lib/courses';
 import { instructorsOf } from '../lib/terms';
@@ -72,21 +72,34 @@ export function ProfessorField({ course, value, onChange, label = 'Professor', r
   );
 
   return (
-    <Autocomplete
-      freeSolo
-      options={names}
-      inputValue={value}
-      onInputChange={(_, next) => onChange(next)}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label={label}
-          placeholder="Last, F"
-          required={required}
-          size={size}
-          helperText={helperText ?? (names.length ? 'Pick a listed name if it is the same person' : 'Last name, first initial')}
-        />
+    <Box>
+      <Autocomplete
+        freeSolo
+        openOnFocus
+        options={names}
+        inputValue={value}
+        onInputChange={(_, next) => onChange(next)}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={label}
+            placeholder="Last, First"
+            required={required}
+            size={size}
+            helperText={helperText ?? 'Last name, first name'}
+          />
+        )}
+      />
+      {names.length > 0 && (
+        <Stack direction="row" sx={{ mt: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            Already listed for {known.display}:
+          </Typography>
+          {names.slice(0, 8).map((name) => (
+            <Chip key={name} size="small" label={name} onClick={() => onChange(name)} />
+          ))}
+        </Stack>
       )}
-    />
+    </Box>
   );
 }

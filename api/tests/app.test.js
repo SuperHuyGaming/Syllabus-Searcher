@@ -61,7 +61,7 @@ function fakes() {
     files: {
       save: jest.fn().mockResolvedValue(FILE_ID),
       read: jest.fn().mockResolvedValue({ buffer: PDF, contentType: 'application/pdf', filename: 'a.pdf' }),
-      move: jest.fn().mockResolvedValue(FILE_ID),
+      move: jest.fn().mockResolvedValue({ id: FILE_ID, contentType: 'application/pdf' }),
       remove: jest.fn().mockResolvedValue(),
       ping: jest.fn().mockResolvedValue(),
     },
@@ -161,9 +161,24 @@ describe('uploads', () => {
     );
   });
 
-  test('rejects files that are not PDFs', async () => {
-    const res = await createApp(fakes())(event('POST', '/api/uploads', { query, body: 'hello' }));
-    expect(res.statusCode).toBe(415);
+  test('rejects files that are not PDFs or HTML pages', async () => {
+    const app = createApp(fakes());
+    expect((await app(event('POST', '/api/uploads', { query, body: 'hello' }))).statusCode).toBe(415);
+    expect((await app(event('POST', '/api/uploads', { query, body: 'PK\x03\x04 docx' }))).statusCode).toBe(415);
+  });
+
+  test('accepts an HTML syllabus and skips the PDF reader', async () => {
+    const deps = fakes();
+    const html = '﻿<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">\n<html><title>CS483</title></html>';
+    const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: html }));
+    expect(res.statusCode).toBe(201);
+    expect(deps.files.save).toHaveBeenCalledWith(
+      'pending',
+      expect.any(Buffer),
+      expect.objectContaining({ contentType: 'text/html; charset=utf-8', filename: 'CS310_2024-3_001.html' })
+    );
+    expect(deps.analyze).not.toHaveBeenCalled();
+    expect(deps.uploads.create).toHaveBeenCalledWith(expect.objectContaining({ detected: null }));
   });
 
   test('rejects bad course details', async () => {
@@ -234,6 +249,20 @@ describe('admin', () => {
     expect(deps.files.move).not.toHaveBeenCalled();
   });
 
+  test('approving an HTML upload keeps its type', async () => {
+    const deps = fakes();
+    deps.files.move.mockResolvedValue({ id: FILE_ID, contentType: 'text/html; charset=utf-8' });
+    await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good') }));
+    expect(deps.catalog.putOffering).toHaveBeenCalledWith(expect.objectContaining({ contentType: 'text/html; charset=utf-8' }));
+  });
+
+  test('pending HTML is served sandboxed to the admin', async () => {
+    const deps = fakes();
+    deps.files.read.mockResolvedValue({ buffer: Buffer.from('<html></html>'), contentType: 'text/html; charset=utf-8' });
+    const res = await createApp(deps)(event('GET', `/api/admin/uploads/${UPLOAD_ID}/file`, { headers: auth('good') }));
+    expect(res.headers['Content-Security-Policy']).toMatch(/^sandbox/);
+  });
+
   test('rejecting deletes the pending file', async () => {
     const deps = fakes();
     const res = await createApp(deps)(
@@ -298,6 +327,14 @@ describe('admin fixes to published syllabi', () => {
     expect(deps.catalog.markCurated).toHaveBeenCalledWith(OFFERING.sourceUrl, { action: 'deleted', by: 'admin@gmu.edu' });
     expect(deps.catalog.deleteOffering).toHaveBeenCalledWith(expect.objectContaining({ SK: OFFERING.SK }));
     expect(deps.files.remove).toHaveBeenCalledWith('syllabi', FILE_ID);
+  });
+
+  test('deleting an HTML syllabus also deletes its PDF copy', async () => {
+    const deps = fakes();
+    const PDF_COPY = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+    deps.catalog.getOffering.mockResolvedValue({ ...OFFERING, pdfFileId: PDF_COPY });
+    await createApp(deps)(post('/api/admin/offerings/delete', { code: 'CS580', id: OFFERING.SK }));
+    expect(deps.files.remove).toHaveBeenCalledWith('syllabi', PDF_COPY);
   });
 
   test('deleting keeps a file another course still uses', async () => {

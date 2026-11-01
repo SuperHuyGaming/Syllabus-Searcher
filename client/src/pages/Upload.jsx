@@ -8,6 +8,9 @@ import { recentTerms } from '../lib/terms';
 import { CourseField, ProfessorField } from '../components/CourseFields';
 
 const MAX_BYTES = 4 * 1024 * 1024;
+// Some professors post the syllabus as a web page; the site makes a PDF copy of those.
+const isHtml = (file) => file.type === 'text/html' || /\.html?$/i.test(file.name);
+const isPdf = (file) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
 const TERMS = recentTerms();
 
 export default function Upload() {
@@ -27,14 +30,14 @@ export default function Upload() {
   function pickFile(e) {
     const picked = e.target.files?.[0] || null;
     setFileError('');
-    if (picked && picked.type !== 'application/pdf') return setFileError('Choose a PDF file.');
-    if (picked && picked.size > MAX_BYTES) return setFileError('PDF must be under 4 MB.');
+    if (picked && !isPdf(picked) && !isHtml(picked)) return setFileError('Choose a PDF or HTML file.');
+    if (picked && picked.size > MAX_BYTES) return setFileError('File must be under 4 MB.');
     setFile(picked);
   }
 
   function submit(e) {
     e.preventDefault();
-    if (!file) return setFileError('Choose a PDF file.');
+    if (!file) return setFileError('Choose a PDF or HTML file.');
     upload.mutate({ ...form, file });
   }
 
@@ -72,8 +75,8 @@ export default function Upload() {
           required
         />
         <Button component="label" variant="outlined" startIcon={<UploadFileIcon />} sx={{ justifyContent: 'flex-start' }}>
-          {file ? file.name : 'Choose PDF (max 4 MB)'}
-          <input type="file" accept="application/pdf" hidden onChange={pickFile} />
+          {file ? file.name : 'Choose PDF or HTML file (max 4 MB)'}
+          <input type="file" accept="application/pdf,.pdf,text/html,.html,.htm" hidden onChange={pickFile} />
         </Button>
         {fileError && <Alert severity="warning">{fileError}</Alert>}
         {upload.isError && <Alert severity="error">{upload.error.message}</Alert>}

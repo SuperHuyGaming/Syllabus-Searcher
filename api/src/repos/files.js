@@ -56,6 +56,7 @@ function createFiles({ db } = {}) {
     },
 
     // Approving an upload copies it into the public bucket under the same id.
+    // Returns { id, contentType }, or null if the file is gone.
     async move(from, to, id) {
       const file = await this.read(from, id);
       if (!file) return null;
@@ -66,7 +67,7 @@ function createFiles({ db } = {}) {
         metadata: file.metadata,
       });
       await this.remove(from, id);
-      return id;
+      return { id, contentType: file.contentType };
     },
 
     async remove(name, id) {

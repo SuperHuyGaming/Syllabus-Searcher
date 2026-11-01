@@ -26,7 +26,8 @@ export const api = {
 
   upload: ({ course, term, section, instructor, file }) => {
     const query = new URLSearchParams({ course, term, section, instructor });
-    return json(`/uploads?${query}`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: file });
+    const type = /\.html?$/i.test(file.name) ? 'text/html' : 'application/pdf';
+    return json(`/uploads?${query}`, { method: 'POST', headers: { 'Content-Type': type }, body: file });
   },
 
   pendingUploads: (token) => json('/admin/uploads', { token }),

@@ -4,3 +4,4 @@ pymongo==4.13.2
 pypdf==6.21.4
 python-dotenv==1.1.0
 requests==2.32.4
+playwright==1.52.0

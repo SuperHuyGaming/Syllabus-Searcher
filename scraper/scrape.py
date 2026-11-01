@@ -24,6 +24,7 @@ from syllabus_scraper import sources
 from syllabus_scraper.catalog import fetch_catalog
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
 from syllabus_scraper.store import Store, detect_content_type
+from syllabus_scraper.text import extract_text
 
 MAX_FILE_BYTES = 4 * 1024 * 1024  # same cap as the API (Lambda response limit)
 DEPARTMENTS = {"CS"}
@@ -84,6 +85,16 @@ def filename_rows(fetcher, since, seen, titles, store):
         log.info("Archive files for %s: %d not on any listing page", term.label, found)
 
 
+def mentions_course(data, content_type, codes):
+    """False for a web page that never names its course number. Dead syllabus links can
+    redirect to a generic department page, and the archive saves that page instead.
+    PDFs are trusted: scanned ones have no text to check."""
+    if not content_type.startswith("text/html"):
+        return True
+    text = extract_text(data, content_type)
+    return any(re.search(rf"(?<!\d){re.escape(code[len(dept_of(code)):])}(?!\d)", text) for code in codes)
+
+
 def save_row(store, fetcher, timestamp, row, codes):
     """Downloads the file if it's new and writes the offering. Returns True if a new file was saved,
     False if it already existed, None if it was skipped."""
@@ -99,6 +110,9 @@ def save_row(store, fetcher, timestamp, row, codes):
         content_type = detect_content_type(data, source_url) if data else None
         if not content_type or len(data) > MAX_FILE_BYTES:
             log.warning("Skipped %s (%s)", source_url, "not found" if not data else "unsupported type or over 4 MB")
+            return None
+        if not mentions_course(data, content_type, codes):
+            log.warning("Skipped %s (a web page that never mentions %s, likely a redirect)", source_url, ",".join(codes))
             return None
         file_id = store.save_file(data, source_url, content_type)
 
@@ -188,6 +202,7 @@ def main(argv=None):
     if store:
         log.info("Made %d syllabi searchable", store.index_text(reindex=args.reindex))
         log.info("Filled in full professor names on %d syllabi", store.resolve_names())
+        log.info("Made PDF copies of %d HTML syllabi", store.make_pdfs())
     return 0
 
 

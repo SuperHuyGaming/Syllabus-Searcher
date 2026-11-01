@@ -15,6 +15,7 @@ from bson import ObjectId
 from pymongo import MongoClient
 
 from .names import full_name, needs_full_name
+from .pdf import PdfMaker
 from .text import extract_text
 
 log = logging.getLogger("scraper")
@@ -220,3 +221,39 @@ class Store:
                 {"$set": {"instructors": list(dict.fromkeys(n for o in offerings for n in o["instructors"]))}},
             )
         return count
+
+    def make_pdfs(self):
+        """Gives every HTML syllabus a PDF copy (pdfFileId on its offerings), so students can
+        always download a PDF. Copies are made once; later runs only re-link them, since a
+        re-scrape rewrites offerings without pdfFileId. Returns how many copies were made."""
+        files = self.db["syllabi.files"]
+        html_files = list(files.find({"metadata.contentType": {"$regex": "^text/html"}}, {"filename": 1}))
+        if not html_files:
+            return 0
+        by_file = self.offerings_by_file()
+        made = 0
+        with PdfMaker() as maker:
+            for html_file in html_files:
+                html_id = str(html_file["_id"])
+                copy = files.find_one({"metadata.pdfOf": html_id}, {"_id": 1})
+                if copy:
+                    pdf_id = str(copy["_id"])
+                else:
+                    pdf = maker.html_to_pdf(self.bucket.open_download_stream(html_file["_id"]).read())
+                    if not pdf:
+                        continue
+                    name = html_file["filename"].rsplit(".", 1)[0] + ".pdf"
+                    pdf_id = str(
+                        self.bucket.upload_from_stream(
+                            name, pdf, metadata={"contentType": "application/pdf", "pdfOf": html_id}
+                        )
+                    )
+                    made += 1
+                for offering in by_file.get(html_id, []):
+                    if offering.get("pdfFileId") != pdf_id:
+                        self.table.update_item(
+                            Key={"PK": offering["PK"], "SK": offering["SK"]},
+                            UpdateExpression="SET pdfFileId = :pdf",
+                            ExpressionAttributeValues={":pdf": pdf_id},
+                        )
+        return made

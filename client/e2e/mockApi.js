@@ -29,7 +29,16 @@ const cs310 = {
   prereqs: 'CS 211 (C) and MATH 113 (C)',
   offerings: [
     { termKey: '2024-3', termLabel: 'Fall 2024', section: '001', instructors: ['Russell, K'], fileId: FILE_A, source: 'gmu-cs' },
-    { termKey: '2024-3', termLabel: 'Fall 2024', section: '002', instructors: ['Masri, W'], fileId: FILE_B, source: 'gmu-cs' },
+    {
+      termKey: '2024-3',
+      termLabel: 'Fall 2024',
+      section: '002',
+      instructors: ['Masri, W'],
+      fileId: FILE_B,
+      pdfFileId: FILE_C,
+      contentType: 'text/html; charset=utf-8',
+      source: 'gmu-cs',
+    },
     { termKey: '2023-1', termLabel: 'Spring 2023', section: 'All', instructors: ['Russell, K'], fileId: FILE_C, source: 'gmu-cs-filename' },
   ],
 };

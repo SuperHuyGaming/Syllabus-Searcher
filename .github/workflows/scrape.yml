@@ -39,4 +39,5 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           pip install -r requirements.txt
+          playwright install --with-deps chromium
           python scrape.py --since "${{ inputs.since || 'Fall 2022' }}"

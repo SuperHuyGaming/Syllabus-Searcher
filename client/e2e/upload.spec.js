@@ -20,11 +20,27 @@ test('upload a syllabus for review', async ({ page }) => {
   expect(sent.type).toBe('application/pdf');
 });
 
-test('rejects files that are not PDFs', async ({ page }) => {
+test('rejects files that are not PDFs or web pages', async ({ page }) => {
   await mockApi(page);
   await page.goto('/upload');
   await page.locator('input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hi') });
-  await expect(page.getByText('Choose a PDF file.')).toBeVisible();
+  await expect(page.getByText('Choose a PDF or HTML file.')).toBeVisible();
+});
+
+test('upload a syllabus posted as a web page', async ({ page }) => {
+  let sent;
+  await mockApi(page, { onUpload: (params, request) => (sent = request.headers()['content-type']) });
+  await page.goto('/upload?course=CS483');
+  await page.getByLabel('Section').fill('007');
+  await page.getByRole('combobox', { name: 'Professor' }).fill('Russell, Raven');
+  await page.locator('input[type=file]').setInputFiles({
+    name: '483_syllabus_fall_26.html',
+    mimeType: 'text/html',
+    buffer: Buffer.from('<!DOCTYPE html><html><title>CS483</title></html>'),
+  });
+  await page.getByRole('button', { name: 'Submit for review' }).click();
+  await expect(page.getByText(/waiting for review/)).toBeVisible();
+  expect(sent).toBe('text/html');
 });
 
 test('shows the course title so a wrong code is obvious', async ({ page }) => {
@@ -41,7 +57,7 @@ test('suggests professors already listed for the course', async ({ page }) => {
   await mockApi(page);
   await page.goto('/upload');
   await page.getByLabel('Course code').fill('CS 310');
-  await page.getByLabel('Professor').click();
-  await expect(page.getByRole('option', { name: 'Masri, W' })).toBeVisible();
-  await expect(page.getByRole('option', { name: 'Russell, K' })).toBeVisible();
+  await expect(page.getByText('Already listed for CS 310:')).toBeVisible();
+  await page.getByRole('button', { name: 'Masri, W' }).click();
+  await expect(page.getByRole('combobox', { name: 'Professor' })).toHaveValue('Masri, W');
 });

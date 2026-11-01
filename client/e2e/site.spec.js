@@ -97,6 +97,13 @@ test('a catalog course with no syllabi shows its details and asks for one', asyn
   await expect(page).toHaveURL(/\/upload\?course=CS105$/);
 });
 
+test('a syllabus posted as a web page also offers a PDF', async ({ page }) => {
+  await page.goto('/courses/CS310');
+  const pdf = page.getByRole('link', { name: 'Download as PDF' });
+  await expect(pdf).toHaveCount(1);
+  await expect(pdf).toHaveAttribute('href', '/api/syllabi/cccccccccccccccccccccccc');
+});
+
 test('course page shows credits and prerequisites', async ({ page }) => {
   await page.goto('/courses/CS310');
   await expect(page.getByText('3 credits')).toBeVisible();

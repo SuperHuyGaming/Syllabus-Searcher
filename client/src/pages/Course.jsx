@@ -17,7 +17,8 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DescriptionIcon from '@mui/icons-material/Description';
-import { api, syllabusUrl } from '../api';
+import { api } from '../api';
+import SyllabusButtons from '../components/SyllabusButtons';
 import { groupByTerm, instructorsOf } from '../lib/terms';
 import { professorSlug } from '../lib/professors';
 
@@ -168,15 +169,7 @@ function CourseSyllabi({ code, term, setTerm, terms, instructor, setInstructor, 
                         )}
                       </Stack>
                     </Box>
-                    <Button
-                      variant="contained"
-                      startIcon={<DescriptionIcon />}
-                      href={syllabusUrl(o.fileId)}
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      View syllabus
-                    </Button>
+                    <SyllabusButtons offering={o} />
                   </CardContent>
                 </Card>
               ))}

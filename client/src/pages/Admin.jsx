@@ -7,6 +7,10 @@ import {
   CardActions,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Link,
   MenuItem,
   Paper,
@@ -219,6 +223,7 @@ function UploadCard({ upload, token }) {
     title: '',
   });
   const [note, setNote] = useState('');
+  const [htmlPreview, setHtmlPreview] = useState(null);
   const done = () => {
     queryClient.invalidateQueries({ queryKey: ['pending'] });
     queryClient.invalidateQueries({ queryKey: ['course'] });
@@ -228,9 +233,16 @@ function UploadCard({ upload, token }) {
   const reject = useMutation({ mutationFn: () => api.reject(upload.id, note, token), onSuccess: done });
   const failure = approve.error || reject.error;
 
-  // The PDF needs the admin token, so fetch it and open it as a local blob.
+  // The file needs the admin token, so fetch it rather than linking to it.
+  // A PDF opens in the browser's viewer. An HTML page is untrusted: opened as a blob
+  // it would run on this site with the admin signed in, so it's shown in a sandboxed
+  // frame instead (no scripts, no access to this page).
   async function openFile() {
     const blob = await api.pendingFile(upload.id, token);
+    if (blob.type.startsWith('text/html')) {
+      setHtmlPreview(await blob.text());
+      return;
+    }
     window.open(URL.createObjectURL(blob), '_blank', 'noopener');
   }
 
@@ -274,7 +286,7 @@ function UploadCard({ upload, token }) {
         )}
       </CardContent>
       <CardActions>
-        <Button onClick={openFile}>Open PDF</Button>
+        <Button onClick={openFile}>Open file</Button>
         <Button variant="contained" onClick={() => approve.mutate()} loading={approve.isPending}>
           Approve
         </Button>
@@ -282,6 +294,20 @@ function UploadCard({ upload, token }) {
           Reject
         </Button>
       </CardActions>
+      <Dialog open={htmlPreview !== null} onClose={() => setHtmlPreview(null)} fullWidth maxWidth="lg">
+        <DialogTitle>HTML syllabus preview (scripts off)</DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <iframe
+            title="Uploaded syllabus"
+            sandbox=""
+            srcDoc={htmlPreview || ''}
+            style={{ width: '100%', height: '70vh', border: 0, background: '#fff' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHtmlPreview(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 }

@@ -4,6 +4,8 @@ const { parseDetails, parseCourse, parseTermInput, parseSection, parseInstructor
 
 const UUID = '([0-9a-f-]{36})';
 const NO_STORE = { 'Cache-Control': 'no-store' };
+// Uploaded HTML is untrusted: if it's ever opened directly, its scripts can't run.
+const HTML_SANDBOX = { 'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:" };
 
 module.exports = ({ catalog, files, uploads, search }) => {
   async function requireAdmin(event) {
@@ -63,7 +65,8 @@ module.exports = ({ catalog, files, uploads, search }) => {
         const upload = await uploads.get(params[0]);
         const file = upload && (await files.read('pending', upload.file_id));
         if (!file) throw new HttpError(404, 'File not found');
-        return binary(file.buffer, file.contentType, NO_STORE);
+        const sandbox = file.contentType.startsWith('text/html') ? HTML_SANDBOX : {};
+        return binary(file.buffer, file.contentType, { ...NO_STORE, ...sandbox, 'X-Content-Type-Options': 'nosniff' });
       },
     },
     {
@@ -83,7 +86,8 @@ module.exports = ({ catalog, files, uploads, search }) => {
         });
         const title = await courseTitle(details.code, body.title);
 
-        await files.move('pending', 'syllabi', upload.file_id);
+        const moved = await files.move('pending', 'syllabi', upload.file_id);
+        if (!moved) throw new HttpError(404, 'The uploaded file is missing');
         await catalog.putOffering({
           dept: details.code.match(/^[A-Z]+/)[0],
           code: details.code,
@@ -92,7 +96,7 @@ module.exports = ({ catalog, files, uploads, search }) => {
           section: details.section,
           instructors: [details.instructor],
           fileId: upload.file_id,
-          contentType: 'application/pdf',
+          contentType: moved.contentType,
           source: 'upload',
         });
         const changes = {
@@ -170,7 +174,10 @@ module.exports = ({ catalog, files, uploads, search }) => {
         await catalog.markCurated(old.sourceUrl, { action: 'deleted', by: reviewer });
         await catalog.deleteOffering(old);
         const remaining = await catalog.offeringsForFile(old.fileId);
-        if (remaining.length === 0) await files.remove('syllabi', old.fileId);
+        if (remaining.length === 0) {
+          await files.remove('syllabi', old.fileId);
+          if (old.pdfFileId) await files.remove('syllabi', old.pdfFileId);
+        }
         await refreshSearch(old.fileId);
         return json(200, { deleted: true, fileDeleted: remaining.length === 0 }, NO_STORE);
       },

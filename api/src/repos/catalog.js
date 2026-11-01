@@ -86,7 +86,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       if (!meta) return null;
       const offerings = items
         .filter((item) => item.SK.startsWith('TERM#'))
-        .map(({ SK, termKey, termLabel, section, instructors, title, fileId, contentType, source }) => ({
+        .map(({ SK, termKey, termLabel, section, instructors, title, fileId, pdfFileId, contentType, source }) => ({
           id: SK,
           termKey,
           termLabel,
@@ -94,6 +94,8 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
           instructors,
           title,
           fileId,
+          // HTML syllabi get a PDF copy from the scraper (scraper/syllabus_scraper/pdf.py).
+          pdfFileId,
           contentType,
           source,
         }));
@@ -114,7 +116,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       const items = await readAll(ScanCommand, {
         FilterExpression: 'begins_with(SK, :term)',
         ExpressionAttributeValues: { ':term': 'TERM#' },
-        ProjectionExpression: 'code, title, termKey, termLabel, #section, instructors, fileId, #source',
+        ProjectionExpression: 'code, title, termKey, termLabel, #section, instructors, fileId, pdfFileId, #source',
         ExpressionAttributeNames: { '#section': 'section', '#source': 'source' },
       });
       return items.map((item) => ({ ...item, display: displayCourse(item.code) }));
