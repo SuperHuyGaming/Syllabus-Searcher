@@ -50,6 +50,9 @@ jobs:
     environment: ${{ needs.target.outputs.environment }}
     concurrency: deploy-${{ needs.target.outputs.environment }}
     env:
+      # Free-plan AWS accounts are locked to one region (this one: Ohio). Set the repo
+      # variable AWS_REGION to change it; Atlas can stay in another region.
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       STACK: ${{ needs.target.outputs.environment == 'production' && 'syllabus-searcher' || 'syllabus-searcher-staging' }}
       MONGODB_DB: ${{ needs.target.outputs.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
     steps:
@@ -97,7 +100,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy API, database and CloudFront
         if: steps.check.outputs.ready == 'true'
@@ -112,18 +115,22 @@ jobs:
           ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
           IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
         run: |
+          # SAM rejects "Name=" with an empty value, so optional settings that
+          # aren't set (e.g. Azure) are left out and the template defaults apply.
+          params=()
+          add() { if [ -n "$2" ]; then params+=("$1=$2"); fi; }
+          add MongoDbUri "$MONGODB_URI"
+          add MongoDbName "$MONGODB_DB"
+          add SupabaseUrl "$SUPABASE_URL"
+          add SupabaseServiceRoleKey "$SUPABASE_SERVICE_ROLE_KEY"
+          add AdminEmails "$ADMIN_EMAILS"
+          add AzureDiEndpoint "$AZURE_DI_ENDPOINT"
+          add AzureDiKey "$AZURE_DI_KEY"
+          add OriginSecret "$ORIGIN_SECRET"
+          add IpHashSalt "$IP_HASH_SALT"
+          add ReservedConcurrency "${{ vars.RESERVED_CONCURRENCY || 0 }}"
           sam build
-          sam deploy --no-progressbar --stack-name "$STACK" --parameter-overrides \
-            "MongoDbUri=$MONGODB_URI" \
-            "MongoDbName=$MONGODB_DB" \
-            "SupabaseUrl=$SUPABASE_URL" \
-            "SupabaseServiceRoleKey=$SUPABASE_SERVICE_ROLE_KEY" \
-            "AdminEmails=$ADMIN_EMAILS" \
-            "AzureDiEndpoint=$AZURE_DI_ENDPOINT" \
-            "AzureDiKey=$AZURE_DI_KEY" \
-            "OriginSecret=$ORIGIN_SECRET" \
-            "IpHashSalt=$IP_HASH_SALT" \
-            "ReservedConcurrency=${{ vars.RESERVED_CONCURRENCY || 0 }}"
+          sam deploy --no-progressbar --region "$AWS_REGION" --stack-name "$STACK" --parameter-overrides "${params[@]}"
 
       - name: Read stack outputs
         if: steps.check.outputs.ready == 'true'
