@@ -7,7 +7,7 @@ stack_name = "syllabus-searcher"
 template_file = "template.yaml"
 
 [default.deploy.parameters]
-region = "us-east-1"
+region = "us-east-2"  # deploy.yml passes --region from the AWS_REGION repo variable
 capabilities = "CAPABILITY_IAM"
 resolve_s3 = true
 confirm_changeset = false

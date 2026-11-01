@@ -50,6 +50,9 @@ jobs:
     environment: ${{ needs.target.outputs.environment }}
     concurrency: deploy-${{ needs.target.outputs.environment }}
     env:
+      # Free-plan AWS accounts are locked to one region (this one: Ohio). Set the repo
+      # variable AWS_REGION to change it; Atlas can stay in another region.
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       STACK: ${{ needs.target.outputs.environment == 'production' && 'syllabus-searcher' || 'syllabus-searcher-staging' }}
       MONGODB_DB: ${{ needs.target.outputs.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
     steps:
@@ -97,7 +100,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy API, database and CloudFront
         if: steps.check.outputs.ready == 'true'
@@ -127,7 +130,7 @@ jobs:
           add IpHashSalt "$IP_HASH_SALT"
           add ReservedConcurrency "${{ vars.RESERVED_CONCURRENCY || 0 }}"
           sam build
-          sam deploy --no-progressbar --stack-name "$STACK" --parameter-overrides "${params[@]}"
+          sam deploy --no-progressbar --region "$AWS_REGION" --stack-name "$STACK" --parameter-overrides "${params[@]}"
 
       - name: Read stack outputs
         if: steps.check.outputs.ready == 'true'

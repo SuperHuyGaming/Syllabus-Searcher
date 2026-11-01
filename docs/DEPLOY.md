@@ -32,11 +32,13 @@ Set up **staging first**, check it works, then repeat steps 3, 5 and 6 for produ
 4. Open the user → Security credentials → Create access key → "Application running outside AWS".
    Copy the **Access key ID** and **Secret access key**. Don't share them anywhere public.
 
+**Region:** a Free plan account is locked to one region, shown in the top-right of the console (for example Ohio, `us-east-2`). Set the repo variable `AWS_REGION` to it (Settings → Secrets and variables → Actions → Variables) before deploying, or the deploy is denied by the account's organization policy. Atlas can be in any region.
+
 The Free Plan for new accounts lasts 6 months. After that, AWS asks you to switch to a paid plan to keep the account. Everything in this project stays inside the *always-free* limits, so it should still cost $0, and the budget alert tells you if that ever changes.
 
 ## 2. MongoDB Atlas (syllabus files)
 
-1. Create a free account at mongodb.com/atlas, then create an **M0 (Free)** cluster in AWS `us-east-1`.
+1. Create a free account at mongodb.com/atlas, then create an **M0 (Free)** cluster on AWS in the region closest to your `AWS_REGION` (any US East region is fine).
 2. Database Access → add a user with a long random password and the "Read and write to any database" role.
 3. Network Access → Add IP Address → `0.0.0.0/0`. Lambda has no fixed IP without a paid NAT gateway, so the strong password is what protects the database.
 4. Connect → Drivers → copy the connection string and put your password in it. This is `MONGODB_URI`.
