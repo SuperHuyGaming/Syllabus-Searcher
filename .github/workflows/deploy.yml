@@ -1,32 +1,93 @@
 # Deploys to AWS: Lambda API + DynamoDB + CloudFront (infra/template.yaml), then the website to S3.
-# Run it from the Actions tab ("Run workflow"). Needs the repo secrets listed in docs/DEPLOY.md.
+#
+#   develop -> staging     (stack syllabus-searcher-staging, database syllabus_searcher_staging)
+#   main    -> production  (stack syllabus-searcher,         database syllabus_searcher)
+#
+# Runs after CI passes on a push to either branch, or by hand from the Actions tab.
+# Each GitHub environment ("staging", "production") holds its own secrets (docs/DEPLOY.md);
+# until they're set, the deploy is skipped instead of failing.
 name: Deploy
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [develop, main]
   workflow_dispatch:
-
-concurrency: deploy
+    inputs:
+      environment:
+        description: Where to deploy the selected branch
+        type: choice
+        options: [staging, production]
+        default: staging
 
 jobs:
-  deploy:
+  target:
+    # Only after a successful CI run for a push (not a pull request), or a manual run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.pick.outputs.environment }}
+      sha: ${{ steps.pick.outputs.sha }}
     steps:
+      - id: pick
+        env:
+          MANUAL: ${{ inputs.environment }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          if [ -n "$MANUAL" ]; then env="$MANUAL"
+          elif [ "$BRANCH" = "main" ]; then env=production
+          else env=staging; fi
+          echo "environment=$env" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: target
+    runs-on: ubuntu-latest
+    environment: ${{ needs.target.outputs.environment }}
+    concurrency: deploy-${{ needs.target.outputs.environment }}
+    env:
+      STACK: ${{ needs.target.outputs.environment == 'production' && 'syllabus-searcher' || 'syllabus-searcher-staging' }}
+      MONGODB_DB: ${{ needs.target.outputs.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        run: |
+          if [ -z "$AWS_KEY" ]; then
+            echo "::notice::No secrets in the '${{ needs.target.outputs.environment }}' environment yet, so nothing was deployed. See docs/DEPLOY.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v7
+        if: steps.check.outputs.ready == 'true'
+        with:
+          ref: ${{ needs.target.outputs.sha }}
       - uses: actions/setup-node@v7
+        if: steps.check.outputs.ready == 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: client/package-lock.json
       - uses: aws-actions/setup-sam@v3
+        if: steps.check.outputs.ready == 'true'
         with:
           use-installer: true
       - uses: aws-actions/configure-aws-credentials@v6
+        if: steps.check.outputs.ready == 'true'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
       - name: Deploy API, database and CloudFront
+        if: steps.check.outputs.ready == 'true'
         working-directory: infra
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
@@ -39,8 +100,9 @@ jobs:
           IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
         run: |
           sam build
-          sam deploy --no-progressbar --parameter-overrides \
+          sam deploy --no-progressbar --stack-name "$STACK" --parameter-overrides \
             "MongoDbUri=$MONGODB_URI" \
+            "MongoDbName=$MONGODB_DB" \
             "SupabaseUrl=$SUPABASE_URL" \
             "SupabaseServiceRoleKey=$SUPABASE_SERVICE_ROLE_KEY" \
             "AdminEmails=$ADMIN_EMAILS" \
@@ -51,15 +113,17 @@ jobs:
             "ReservedConcurrency=${{ vars.RESERVED_CONCURRENCY || 0 }}"
 
       - name: Read stack outputs
+        if: steps.check.outputs.ready == 'true'
         id: stack
         run: |
-          out() { aws cloudformation describe-stacks --stack-name syllabus-searcher \
+          out() { aws cloudformation describe-stacks --stack-name "$STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
           echo "bucket=$(out SiteBucketName)" >> "$GITHUB_OUTPUT"
           echo "distribution=$(out DistributionId)" >> "$GITHUB_OUTPUT"
           echo "url=$(out SiteUrl)" >> "$GITHUB_OUTPUT"
 
       - name: Build website
+        if: steps.check.outputs.ready == 'true'
         working-directory: client
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -69,6 +133,7 @@ jobs:
           npm run build
 
       - name: Upload website
+        if: steps.check.outputs.ready == 'true'
         working-directory: client/dist
         run: |
           # Hashed assets never change; index.html must always be re-checked.
@@ -79,4 +144,5 @@ jobs:
           aws cloudfront create-invalidation --distribution-id "${{ steps.stack.outputs.distribution }}" \
             --paths "/index.html" > /dev/null
 
-      - run: echo "Deployed to ${{ steps.stack.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+      - if: steps.check.outputs.ready == 'true'
+        run: echo "Deployed ${{ needs.target.outputs.environment }} to ${{ steps.stack.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"

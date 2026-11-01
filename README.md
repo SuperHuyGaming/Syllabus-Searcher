@@ -98,7 +98,9 @@ Tests: `cd api && npm test`, `cd client && npm test`, `cd scraper && .venv/Scrip
 
 ## Deploying to AWS
 
-Step by step, including account setup and GitHub secrets: [docs/DEPLOY.md](docs/DEPLOY.md). Deploys run from the Actions tab and use `infra/template.yaml` (AWS SAM).
+Step by step, including account setup and GitHub secrets: [docs/DEPLOY.md](docs/DEPLOY.md). Deploys use `infra/template.yaml` (AWS SAM).
+
+Two environments, one per branch: `develop` deploys to **staging** and `main` to **production**, each after CI passes. Build features on a branch off `develop`, check them on staging, then merge `develop` into `main` with a pull request (`main` is protected).
 
 ## Keeping AWS free (when hosting there)
 

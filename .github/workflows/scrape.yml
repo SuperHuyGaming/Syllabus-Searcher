@@ -1,5 +1,5 @@
-# Re-scrapes GMU CS syllabi into the cloud stores (DynamoDB + MongoDB Atlas) every week.
-# Skips quietly until the deploy secrets exist.
+# Re-scrapes GMU CS syllabi into the cloud stores (DynamoDB + MongoDB Atlas) every week,
+# for both environments. Each environment skips quietly until its secrets exist.
 name: Scrape syllabi
 
 on:
@@ -7,6 +7,11 @@ on:
     - cron: '0 9 * * 1' # Mondays 09:00 UTC
   workflow_dispatch:
     inputs:
+      environment:
+        description: Which environment's databases to fill
+        type: choice
+        options: [production, staging]
+        default: production
       since:
         description: Oldest term to scrape
         default: Fall 2022
@@ -14,6 +19,11 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-24.04  # Playwright 1.52 installs Chromium on 24.04, not 26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production","staging"]') }}
+    environment: ${{ matrix.environment }}
     steps:
       - name: Check secrets
         id: check
@@ -33,7 +43,9 @@ jobs:
         working-directory: scraper
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          TABLE_NAME: syllabus-searcher-catalog
+          # Same names the deploy workflow gives each environment's stack and database.
+          MONGODB_DB: ${{ matrix.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
+          TABLE_NAME: ${{ matrix.environment == 'production' && 'syllabus-searcher-catalog' || 'syllabus-searcher-staging-catalog' }}
           AWS_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
