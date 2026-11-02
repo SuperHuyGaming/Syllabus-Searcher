@@ -110,8 +110,8 @@ A free Render static site gives each environment an easier address than CloudFro
    | Publish directory | `render/production` | `render/staging` |
 
    Under Advanced → Build Filters, include only `render/**` so other pushes don't redeploy it.
-3. The site → **Redirects/Rewrites** → add: source `/*`, destination `https://<CloudFront address>/:splat`, action **Redirect**.
-   If the rule ever misses, `index.html` in the folder does the same redirect.
+3. The site → **Redirects/Rewrites** → add: source `/*`, destination `https://<CloudFront address>/*`, action **Redirect** (`*` in the destination is the rest of the path).
+   Render skips rules for paths that have a file, so `/` gets `index.html`, which does the same redirect in the browser.
 
 The address bar ends up on CloudFront, so Supabase and `SITE_URL` keep the CloudFront address.
 
