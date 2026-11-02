@@ -43,7 +43,7 @@ async function signIn(page) {
   await page.route('https://e2e.supabase.co/**', (route) => route.fulfill({ status: 200, body: '{}' }));
 }
 
-async function mockAdminApi(page, onFile) {
+async function mockAdminApi(page, onFile, { html = false } = {}) {
   await page.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/admin/uploads') {
@@ -55,7 +55,7 @@ async function mockAdminApi(page, onFile) {
         instructor: 'Russell, K',
         file_size: 2048,
         created_at: '2026-11-01T18:00:00Z',
-        detected: { fileCheck: { status: 'stripped', pages: 2, removed: ['JavaScript'] } },
+        detected: { fileCheck: html ? { status: 'html' } : { status: 'stripped', pages: 2, removed: ['JavaScript'] } },
       };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ uploads: [upload] }) });
     }
@@ -127,4 +127,37 @@ test('clicking the viewer open and shut quickly keeps the page working', async (
   await expect(dialog.getByText('Page 1 of 2')).toBeVisible();
   await expect(dialog.getByText('CS 310 Syllabus')).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('a pending PDF can also open in a new tab', async ({ page }) => {
+  // Test browsers have no PDF reader (a PDF tab just stays blank), so window.open
+  // returns a stand-in tab that records where it was sent.
+  await page.addInitScript(() => {
+    window.openedTab = { opener: window, location: { href: '' }, openedBeforeFetch: false, close() {} };
+    window.open = () => {
+      window.openedTab.openedBeforeFetch = !window.fileFetched;
+      return window.openedTab;
+    };
+  });
+  await signIn(page);
+  await mockAdminApi(page, () => page.evaluate(() => (window.fileFetched = true)).catch(() => {}));
+  await page.goto('/admin');
+
+  await page.getByRole('button', { name: 'Open in new tab' }).click();
+  await expect.poll(() => page.evaluate(() => window.openedTab.location.href)).toMatch(/^blob:/);
+  const tab = await page.evaluate(async () => {
+    const res = await fetch(window.openedTab.location.href);
+    const text = await res.text();
+    return { type: res.headers.get('content-type'), start: text.slice(0, 5), opener: window.openedTab.opener, early: window.openedTab.openedBeforeFetch };
+  });
+  expect(tab).toEqual({ type: 'application/pdf', start: '%PDF-', opener: null, early: true });
+  await expect(page.getByRole('alert').filter({ hasText: /blocked|Only PDFs/ })).toHaveCount(0);
+});
+
+test('HTML uploads have no new-tab button, since they would run on this site', async ({ page }) => {
+  await signIn(page);
+  await mockAdminApi(page, undefined, { html: true });
+  await page.goto('/admin');
+  await expect(page.getByRole('button', { name: 'View file' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open in new tab' })).toHaveCount(0);
 });

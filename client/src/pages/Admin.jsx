@@ -258,6 +258,30 @@ function UploadCard({ upload, token }) {
     }
   }
 
+  // Opens a PDF in the browser's own viewer, for Ctrl+F and printing. Stored PDFs are
+  // rebuilt without scripts, so this is safe enough; HTML never opens this way (it
+  // would run on this site). The tab is opened during the click, before the download,
+  // or the browser's popup blocker would stop it.
+  async function openInTab() {
+    setOpenError(null);
+    const tab = window.open('', '_blank');
+    if (!tab) {
+      setOpenError('The browser blocked the new tab. Allow pop-ups for this site and try again.');
+      return;
+    }
+    tab.opener = null;
+    try {
+      const blob = await api.pendingFile(upload.id, token);
+      if (!blob.type.startsWith('application/pdf')) throw new Error('Only PDFs open in a new tab. Use View file for web pages.');
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      tab.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      tab.close();
+      setOpenError(err.message);
+    }
+  }
+
   const detected = upload.detected;
   const fileCheck = fileCheckMessage(detected?.fileCheck);
   return (
@@ -308,6 +332,7 @@ function UploadCard({ upload, token }) {
         <Button onClick={openFile} loading={opening}>
           View file
         </Button>
+        {detected?.fileCheck?.status !== 'html' && <Button onClick={openInTab}>Open in new tab</Button>}
         <Button variant="contained" onClick={() => approve.mutate()} loading={approve.isPending}>
           Approve
         </Button>
