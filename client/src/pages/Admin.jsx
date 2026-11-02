@@ -26,6 +26,7 @@ import { groupByTerm, recentTerms, termLabel } from '../lib/terms';
 import { displayCourse } from '../lib/courses';
 import { fileCheckMessage } from '../lib/filecheck';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 // Admins may need to fix syllabi older than the upload form's Fall 2022 cutoff.
 const ADMIN_TERMS = recentTerms(new Date(), '2015-1');
@@ -229,6 +230,7 @@ function UploadCard({ upload, token }) {
   const [htmlPreview, setHtmlPreview] = useState(null);
   const [pdfData, setPdfData] = useState(null);
   const [openError, setOpenError] = useState(null);
+  const [opening, setOpening] = useState(false);
   const done = () => {
     queryClient.invalidateQueries({ queryKey: ['pending'] });
     queryClient.invalidateQueries({ queryKey: ['course'] });
@@ -244,12 +246,15 @@ function UploadCard({ upload, token }) {
   // a sandboxed frame (no scripts, no access to this page).
   async function openFile() {
     setOpenError(null);
+    setOpening(true);
     try {
       const blob = await api.pendingFile(upload.id, token);
       if (blob.type.startsWith('text/html')) setHtmlPreview(await blob.text());
       else setPdfData(await blob.arrayBuffer());
     } catch (err) {
       setOpenError(err.message);
+    } finally {
+      setOpening(false);
     }
   }
 
@@ -300,7 +305,9 @@ function UploadCard({ upload, token }) {
         )}
       </CardContent>
       <CardActions>
-        <Button onClick={openFile}>View file</Button>
+        <Button onClick={openFile} loading={opening}>
+          View file
+        </Button>
         <Button variant="contained" onClick={() => approve.mutate()} loading={approve.isPending}>
           Approve
         </Button>
@@ -325,9 +332,11 @@ function UploadCard({ upload, token }) {
       <Dialog open={pdfData !== null} onClose={() => setPdfData(null)} fullWidth maxWidth="xl">
         <DialogTitle>PDF preview (scripts and links off)</DialogTitle>
         <DialogContent dividers sx={{ height: '80vh' }}>
-          <Suspense fallback={<Typography>Loading viewer…</Typography>}>
-            {pdfData && <PdfViewer data={pdfData} />}
-          </Suspense>
+          <ErrorBoundary message="Could not show this PDF">
+            <Suspense fallback={<Typography>Loading viewer…</Typography>}>
+              {pdfData && <PdfViewer data={pdfData} />}
+            </Suspense>
+          </ErrorBoundary>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPdfData(null)}>Close</Button>
