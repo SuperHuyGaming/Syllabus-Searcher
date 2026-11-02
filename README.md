@@ -19,6 +19,7 @@ Look up a GMU Computer Science course, see which professors taught it each term 
 | Syllabus files + text search | MongoDB GridFS + text index | Mongo container | MongoDB Atlas M0 |
 | Upload queue + admin login | Supabase Postgres + Auth | Supabase free tier (cloud) | Supabase free tier |
 | PDF reading (optional) | Azure AI Document Intelligence | Azure F0 (cloud) | Azure F0 |
+| AI check of uploads (optional) | Gemini API, Groq as fallback | free tiers (cloud) | free tiers |
 | Scraper | Python | One-off container | GitHub Actions schedule |
 
 ```
@@ -26,7 +27,8 @@ browser ──> nginx / CloudFront ──> /            static React build
                                 └─> /api/*      API ──> DynamoDB  (courses, terms, professors)
                                                     ├─> MongoDB   (PDF/HTML files)
                                                     ├─> Supabase  (pending uploads, admin auth)
-                                                    └─> Azure     (reads uploaded PDFs)
+                                                    ├─> Azure     (reads uploaded PDFs)
+                                                    └─> Gemini/Groq (AI check of uploads)
 ```
 
 ## Run it locally with Docker
@@ -67,6 +69,10 @@ Without Supabase keys, searching and viewing syllabi work, but uploads and `/adm
 ### Azure Document Intelligence (optional, free F0 tier)
 
 Create a Document Intelligence resource on the F0 tier and put its endpoint and key in `.env`. Each upload is then read and the reviewer sees which course codes and terms the PDF mentions. Uploads work without it.
+
+### AI check of uploads (optional, free tiers)
+
+Put a Gemini API key (aistudio.google.com/apikey) in `AI_API_KEY`, and optionally a Groq key in `AI_FALLBACK_API_KEY`. Each upload's text is then sent to the model, which says whether it looks like a syllabus and whether it matches the course, term, section and instructor the student entered. The review card shows the verdict with its reasons, flags a syllabus already on the site for that section, and has a "Run again" button that checks the details as corrected on the card. Before sending, emails, phone numbers and G-numbers are replaced and the text is cut to 20,000 characters, since free tiers may keep prompts. When no key is set or the quota runs out, the card says "AI check unavailable" and the admin reviews by hand. The admin always decides; nothing is approved automatically.
 
 ## Where the courses and syllabi come from
 

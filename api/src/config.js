@@ -19,6 +19,14 @@ module.exports = {
   azureEndpoint: (process.env.AZURE_DI_ENDPOINT || '').replace(/\/$/, ''),
   azureKey: process.env.AZURE_DI_KEY || '',
 
+  // AI check of uploads (src/lib/ai.js). Free tiers only; off when no key is set.
+  aiProvider: (process.env.AI_PROVIDER || 'gemini').toLowerCase(),
+  aiModel: process.env.AI_MODEL || '',
+  aiApiKey: process.env.AI_API_KEY || '',
+  aiFallbackProvider: (process.env.AI_FALLBACK_PROVIDER || '').toLowerCase(),
+  aiFallbackModel: process.env.AI_FALLBACK_MODEL || '',
+  aiFallbackApiKey: process.env.AI_FALLBACK_API_KEY || '',
+
   originSecret: process.env.ORIGIN_SECRET || '',
   ipHashSalt: process.env.IP_HASH_SALT || '',
   uploadsPerHour: Number(process.env.UPLOADS_PER_HOUR || 5),
