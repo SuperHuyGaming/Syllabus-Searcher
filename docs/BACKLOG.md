@@ -63,6 +63,17 @@ Found in testing: a CS 584 syllabus was uploaded as CS 580, approved, and landed
 - [ ] The AI check (item 3) also compares the course code in the PDF with the one entered.
 - [ ] Merge two spellings of one professor in one step from the admin page (today: edit each syllabus). Known case: "Gonzalez Hernandez, A" and "González, Ana". Until then, Actions → "Rename professor" does it per environment (`api/scripts/rename-professor.js`, dry run first).
 
+### 6. Show when the data was last updated
+
+The cs.gmu.edu/syllabi/ page has returned 404 since late 2025 and the newest Internet Archive capture is from September 2025, so the weekly scrape re-reads the same captures. New syllabi now come only from uploads, and students can't tell how fresh the site is.
+
+- [ ] Record a "last updated" time per environment: the end of the last successful scrape and the time of the last approved upload, whichever is newer. Store it in DynamoDB (one small item) so no schema change is needed.
+- [ ] Return it from the API (`GET /api/status` or on an existing response) and show "Last updated Nov 1, 2026" in the footer or on the home page.
+- [ ] Optional: say on the home page that new terms come from uploads, with a link to the Upload page.
+- [ ] Optional: a "Refresh now" button on the admin page that starts the Scrape syllabi workflow through the GitHub API (`workflow_dispatch`, fine-grained token with Actions write on this repo only, kept in the environment secrets). Low value while the source page is offline; today the same thing is Actions → Scrape syllabi → Run workflow.
+
+Known gap: CS 405 has no syllabus. Its only listing (Spring 2025, `CS_405All_InstructorsAll.html`) was never captured by the Internet Archive, so it has to come from an upload.
+
 ### Free AI options
 
 Everything in this sprint must stay at $0, like the rest of the project. Free tiers and their limits change often, so check each provider's current terms before building on it.
