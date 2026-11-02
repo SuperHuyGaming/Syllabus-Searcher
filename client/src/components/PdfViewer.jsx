@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, FormControlLabel, Stack, Switch, Typography } from '@mui/material';
-import { AnnotationMode, GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
+import { AnnotationMode, PDFWorker, getDocument } from 'pdfjs-dist';
 import { pageText } from '../lib/pdftext';
 
 // pdf.js parses in a worker. Vite bundles it as a plain .js file, so S3 and nginx
-// serve it with a JavaScript type (they don't all know .mjs). One worker serves every file.
-GlobalWorkerOptions.workerPort = new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), {
-  type: 'module',
+// serve it with a JavaScript type (they don't all know .mjs). One worker serves every
+// file and is handed to each getDocument call: a loading task only shuts down a worker
+// it made itself, so closing the viewer can't break the next file opened right after.
+const worker = new PDFWorker({
+  port: new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), { type: 'module' }),
 });
 
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
@@ -27,9 +29,14 @@ export default function PdfViewer({ data }) {
   // The dialog mounts a new viewer for each file, so state starts fresh per file.
   useEffect(() => {
     // pdf.js moves the bytes to its worker, so pass a copy and keep `data` usable.
-    const task = getDocument({ data: new Uint8Array(data.slice(0)) });
-    task.promise.then(setPdf, (err) => setError(err.message));
+    let closed = false;
+    const task = getDocument({ data: new Uint8Array(data.slice(0)), worker });
+    task.promise.then(
+      (doc) => !closed && setPdf(doc),
+      (err) => !closed && setError(err.message)
+    );
     return () => {
+      closed = true;
       task.destroy();
     };
   }, [data]);
