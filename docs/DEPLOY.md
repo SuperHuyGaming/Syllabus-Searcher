@@ -95,6 +95,26 @@ Do this for `staging` first, then `production`.
    This turns on the keep-alive workflow for it, so its Supabase project and Atlas don't pause.
 6. In that environment's Supabase project, Authentication → URL Configuration, set the Site URL to the site URL and add `<site URL>/admin` as a redirect URL.
 
+## 7. Short address on Render (optional)
+
+A free Render static site gives each environment an easier address than CloudFront's and redirects every visit there. Nothing changes on AWS.
+
+1. render.com → sign in with GitHub → project "Syllabus Searcher" with environments Production and Staging.
+2. In each environment, **New → Static Site** from this repo:
+
+   | | Production | Staging |
+   |---|---|---|
+   | Name (becomes the subdomain) | `findmysyllabus` | `findmysyllabus-staging` |
+   | Branch | `main` | `develop` |
+   | Build command | (empty) | (empty) |
+   | Publish directory | `render/production` | `render/staging` |
+
+   Under Advanced → Build Filters, include only `render/**` so other pushes don't redeploy it.
+3. The site → **Redirects/Rewrites** → add: source `/*`, destination `https://<CloudFront address>/*`, action **Redirect** (`*` in the destination is the rest of the path).
+   Render skips rules for paths that have a file, so `/` gets `index.html`, which does the same redirect in the browser.
+
+The address bar ends up on CloudFront, so Supabase and `SITE_URL` keep the CloudFront address.
+
 ## What runs automatically after that
 
 - **CI**: tests, lint and a Docker build on every push to `develop` or `main` and on every pull request.

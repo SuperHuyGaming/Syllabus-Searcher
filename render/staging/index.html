@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- Render serves this for "/" (its redirect rule skips paths that have a file).
+     Sends the visitor to the same path on the CloudFront site. See docs/DEPLOY.md. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Syllabus Searcher (staging)</title>
+  <meta http-equiv="refresh" content="0; url=https://d1vje5j2q42qgc.cloudfront.net/">
+  <script>location.replace('https://d1vje5j2q42qgc.cloudfront.net' + location.pathname + location.search + location.hash);</script>
+</head>
+<body>
+  <p>Moving to <a href="https://d1vje5j2q42qgc.cloudfront.net/">https://d1vje5j2q42qgc.cloudfront.net</a>.</p>
+</body>
+</html>
