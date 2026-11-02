@@ -27,6 +27,7 @@ A file can start with `%PDF-` and still carry JavaScript, auto-run actions or em
 - [x] Render the pending PDF on the review card with pdf.js (canvas rendering, scripts off) instead of opening a new tab, so nothing is handed to the OS or a desktop PDF reader. `client/src/components/PdfViewer.jsx`, loaded only when an admin opens a PDF. Links, form fields and other annotations are not drawn.
 - [x] Serve the admin file response with `Content-Disposition: inline`, `X-Content-Type-Options: nosniff` and a `sandbox` CSP (for every file type, not just HTML).
 - [x] Page through the PDF, zoom, and see the extracted text next to it (a "Text" switch hides it).
+- [x] "Open in new tab" next to "View file" opens a PDF in the browser's own reader, for Ctrl+F and printing. PDFs only: HTML would run on the site, so it stays in the sandboxed preview.
 
 ### 3. AI check of each upload
 
