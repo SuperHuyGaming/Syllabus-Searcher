@@ -61,7 +61,7 @@ Found in testing: a CS 584 syllabus was uploaded as CS 580, approved, and landed
 - [x] Admin "Published syllabi" tab: move, edit or delete any syllabus, scraped or uploaded. Fixes to scraped files are recorded (`PK=CURATED`) so the weekly scrape doesn't undo them.
 - [x] Full professor names: the scraper reads "Zhu, Ziwei" out of the syllabus text when the listing only says "Zhu, Z" or "Gonzalez".
 - [ ] The AI check (item 3) also compares the course code in the PDF with the one entered.
-- [ ] Merge two spellings of one professor in one step (today: edit each syllabus). Known case: "Gonzalez Hernandez, A" and "González, Ana".
+- [ ] Merge two spellings of one professor in one step from the admin page (today: edit each syllabus). Known case: "Gonzalez Hernandez, A" and "González, Ana". Until then, Actions → "Rename professor" does it per environment (`api/scripts/rename-professor.js`, dry run first).
 
 ### Free AI options
 

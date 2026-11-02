@@ -1,0 +1,52 @@
+# Renames a professor on every syllabus that lists them, in one environment
+# (api/scripts/rename-professor.js). Same effect as editing each listing in the admin
+# Published tab: the weekly scrape keeps the new name and search shows it.
+# Leave "apply" off first to see what would change.
+name: Rename professor
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which site to change
+        type: choice
+        options: [staging, production]
+        default: staging
+      from:
+        description: Current name, exactly as listed (e.g. "Yu, L")
+        required: true
+      to:
+        description: New name (e.g. "Yu, Craig")
+        required: true
+      apply:
+        description: Make the change (off = dry run)
+        type: boolean
+        default: false
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Rename
+        working-directory: api
+        env:
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+          APPLY: ${{ inputs.apply && '--apply' || '' }}
+          # Same names the deploy workflow gives each environment's stack and database.
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ inputs.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
+          TABLE_NAME: ${{ inputs.environment == 'production' && 'syllabus-searcher-catalog' || 'syllabus-searcher-staging-catalog' }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          npm ci --omit=dev
+          node scripts/rename-professor.js "$FROM" "$TO" $APPLY | tee -a "$GITHUB_STEP_SUMMARY"
