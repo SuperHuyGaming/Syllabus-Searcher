@@ -169,6 +169,14 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       });
     },
 
+    // Every offering that lists this exact professor name (full items, for editing).
+    async offeringsByInstructor(name) {
+      return readAll(ScanCommand, {
+        FilterExpression: 'begins_with(SK, :term) AND contains(instructors, :name)',
+        ExpressionAttributeValues: { ':term': 'TERM#', ':name': name },
+      });
+    },
+
     // Rewrites an offering with new details. Course, term and section are part of the key,
     // so a change to any of them writes a new item and deletes the old one.
     async updateOffering(old, { dept, code, title, term, section, instructors }) {
