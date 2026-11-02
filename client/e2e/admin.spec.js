@@ -43,9 +43,7 @@ async function signIn(page) {
   await page.route('https://e2e.supabase.co/**', (route) => route.fulfill({ status: 200, body: '{}' }));
 }
 
-test('admin views a pending PDF on the page', async ({ page }) => {
-  let fileAuth;
-  await signIn(page);
+async function mockAdminApi(page, onFile) {
   await page.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/admin/uploads') {
@@ -62,11 +60,17 @@ test('admin views a pending PDF on the page', async ({ page }) => {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ uploads: [upload] }) });
     }
     if (path === `/api/admin/uploads/${UPLOAD_ID}/file`) {
-      fileAuth = route.request().headers().authorization;
+      onFile?.(route.request());
       return route.fulfill({ status: 200, contentType: 'application/pdf', body: makePdf(['CS 310 Syllabus', 'Grading policy']) });
     }
     return route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"Not found"}' });
   });
+}
+
+test('admin views a pending PDF on the page', async ({ page }) => {
+  let fileAuth;
+  await signIn(page);
+  await mockAdminApi(page, (request) => (fileAuth = request.headers().authorization));
 
   await page.goto('/admin');
   await expect(page.getByText('Removed from the PDF: JavaScript')).toBeVisible();
@@ -102,4 +106,25 @@ test('admin views a pending PDF on the page', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
   expect(popups).toHaveLength(0);
+});
+
+// Clicking "View file" several times, or closing and reopening right away, used to reuse
+// pdf.js's worker while it was shutting down; the error took the whole page down.
+test('clicking the viewer open and shut quickly keeps the page working', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await signIn(page);
+  await mockAdminApi(page);
+  await page.goto('/admin');
+
+  const view = page.getByRole('button', { name: 'View file' });
+  const dialog = page.getByRole('dialog');
+  for (let i = 0; i < 3; i += 1) {
+    await view.click({ clickCount: 4 });
+    await dialog.getByRole('button', { name: 'Close' }).click();
+  }
+  await view.click();
+  await expect(dialog.getByText('Page 1 of 2')).toBeVisible();
+  await expect(dialog.getByText('CS 310 Syllabus')).toBeVisible();
+  expect(errors).toEqual([]);
 });
