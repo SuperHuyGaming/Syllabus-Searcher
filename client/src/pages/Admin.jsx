@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
+  Autocomplete,
   Button,
   Card,
   CardActions,
@@ -24,6 +25,7 @@ import { api, syllabusUrl } from '../api';
 import { supabase } from '../supabase';
 import { groupByTerm, recentTerms, termLabel } from '../lib/terms';
 import { displayCourse } from '../lib/courses';
+import { likelySpellings } from '../lib/professors';
 import { fileCheckMessage } from '../lib/filecheck';
 import { aiCheckMessage } from '../lib/aicheck';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
@@ -137,8 +139,11 @@ function Dashboard({ token, email }) {
       <Tabs value={tab} onChange={(_, next) => setTab(next)} sx={{ mb: 3 }}>
         <Tab value="pending" label={count ? `Pending uploads (${count})` : 'Pending uploads'} />
         <Tab value="published" label="Published syllabi" />
+        <Tab value="professors" label="Professors" />
       </Tabs>
-      {tab === 'pending' ? <ReviewQueue token={token} /> : <Published token={token} />}
+      {tab === 'pending' && <ReviewQueue token={token} />}
+      {tab === 'published' && <Published token={token} />}
+      {tab === 'professors' && <Professors token={token} />}
     </>
   );
 }
@@ -482,6 +487,151 @@ function Published({ token }) {
             </div>
           ))}
       </Stack>
+    </>
+  );
+}
+
+// Merges two spellings of one professor ("Gonzalez Hernandez, A" and "González, Ana")
+// on every syllabus at once. A preview comes first; nothing changes until "Merge".
+function Professors({ token }) {
+  const queryClient = useQueryClient();
+  const [from, setFrom] = useState(null);
+  const [into, setInto] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [merged, setMerged] = useState(null);
+  const { data, error } = useQuery({ queryKey: ['admin-professors'], queryFn: () => api.adminProfessors(token) });
+  const professors = useMemo(() => data?.professors || [], [data]);
+  const byName = useMemo(() => new Map(professors.map((p) => [p.name, p])), [professors]);
+  const groups = useMemo(() => likelySpellings(professors.map((p) => p.name)), [professors]);
+
+  const choose = (nextFrom, nextInto) => {
+    setFrom(nextFrom);
+    setInto(nextInto);
+    setPreview(null);
+    setMerged(null);
+  };
+  const check = useMutation({
+    mutationFn: () => api.mergeProfessors({ from, into }, token),
+    onSuccess: (result) => setPreview(result.changes),
+  });
+  const merge = useMutation({
+    mutationFn: () => api.mergeProfessors({ from, into, apply: true }, token),
+    onSuccess: async (result) => {
+      setMerged({ from, into, count: result.changes.length });
+      setFrom(null);
+      setInto('');
+      setPreview(null);
+      await Promise.all(
+        ['admin-professors', 'admin-course', 'course', 'courses', 'professors', 'search'].map((key) =>
+          queryClient.invalidateQueries({ queryKey: [key] })
+        )
+      );
+    },
+  });
+  const describe = (name) => {
+    const p = byName.get(name);
+    return p ? `${p.count} ${p.count === 1 ? 'syllabus' : 'syllabi'} · ${p.courses.join(', ')}` : 'New spelling';
+  };
+  const failure = error || check.error || merge.error;
+
+  return (
+    <>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        Merge two spellings of one professor on every syllabus at once. Pick the spelling to replace and the one to
+        keep (or type the full name). Scraped syllabi keep the fix, like edits in Published syllabi.
+      </Typography>
+      {groups.length > 0 && (
+        <Stack direction="row" sx={{ mb: 2, flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            Possible duplicates:
+          </Typography>
+          {groups.map(([keep, ...others]) =>
+            others.map((other) => (
+              <Chip key={other} size="small" label={`${other} → ${keep}`} onClick={() => choose(other, keep)} />
+            ))
+          )}
+        </Stack>
+      )}
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <Autocomplete
+          sx={{ flex: 1 }}
+          options={professors.map((p) => p.name)}
+          value={from}
+          onChange={(_, next) => choose(next, into)}
+          renderOption={({ key, ...props }, name) => (
+            <li key={key} {...props}>
+              <span>
+                <strong>{name}</strong>
+                <Typography component="span" variant="body2" color="text.secondary">
+                  &nbsp;· {describe(name)}
+                </Typography>
+              </span>
+            </li>
+          )}
+          renderInput={(params) => (
+            <TextField {...params} label="Replace this spelling" helperText={from ? describe(from) : ' '} />
+          )}
+        />
+        <Autocomplete
+          sx={{ flex: 1 }}
+          freeSolo
+          options={professors.map((p) => p.name).filter((name) => name !== from)}
+          inputValue={into}
+          onInputChange={(_, next) => {
+            setInto(next);
+            setPreview(null);
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="With this name"
+              placeholder="Last, First"
+              helperText={into.trim() ? describe(into.trim()) : 'Last name, first name'}
+            />
+          )}
+        />
+      </Stack>
+      {failure && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {failure.message}
+        </Alert>
+      )}
+      {merged && (
+        <Alert severity="success" sx={{ mt: 2 }}>
+          Merged &quot;{merged.from}&quot; into &quot;{merged.into}&quot; on {merged.count}{' '}
+          {merged.count === 1 ? 'syllabus' : 'syllabi'}.
+        </Alert>
+      )}
+      {preview ? (
+        <Paper variant="outlined" sx={{ mt: 2, p: 2 }}>
+          <Typography sx={{ fontWeight: 700, mb: 1 }}>
+            {preview.length} {preview.length === 1 ? 'syllabus' : 'syllabi'} will change:
+          </Typography>
+          <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 3 }}>
+            {preview.map((c) => (
+              <Typography component="li" variant="body2" key={`${c.code}-${c.term}-${c.section}-${c.before.join()}`}>
+                {displayCourse(c.code)} {c.term}, section {c.section}: {c.before.join('; ')} → {c.after.join('; ')}
+              </Typography>
+            ))}
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+            <Button variant="contained" onClick={() => merge.mutate()} loading={merge.isPending}>
+              Merge
+            </Button>
+            <Button onClick={() => setPreview(null)}>Cancel</Button>
+          </Stack>
+        </Paper>
+      ) : (
+        <Button
+          variant="contained"
+          sx={{ mt: 2 }}
+          disabled={!from || !into.trim()}
+          onClick={() => check.mutate()}
+          loading={check.isPending}
+        >
+          Preview merge
+        </Button>
+      )}
     </>
   );
 }

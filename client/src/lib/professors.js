@@ -45,3 +45,25 @@ export function matchProfessors(professors, query, limit = Infinity) {
     .slice(0, limit)
     .map(({ professor }) => professor);
 }
+
+const PLACEHOLDERS = /^(staff|all|tba)\b/i;
+// How much of the first name is spelled out: "Ana" beats "A".
+const firstNameLength = (name) => (name.split(',')[1] || '').trim().length;
+
+// Groups stored spellings that may be one person, for the admin's merge tool:
+// names whose surname starts with the same word, ignoring accents ("Gonzalez Hernandez, A"
+// and "González, Ana"). The fullest name comes first as the one to keep.
+export function likelySpellings(names) {
+  const groups = new Map();
+  for (const name of names) {
+    if (PLACEHOLDERS.test(name)) continue;
+    const [first] = nameWords(name.split(',')[0]);
+    if (!first) continue;
+    if (!groups.has(first)) groups.set(first, []);
+    groups.get(first).push(name);
+  }
+  return [...groups.values()]
+    .filter((group) => group.length > 1)
+    .map((group) => [...group].sort((a, b) => firstNameLength(b) - firstNameLength(a) || b.length - a.length))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+}

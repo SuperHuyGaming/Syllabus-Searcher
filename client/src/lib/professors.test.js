@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { findProfessor, professorSlug, matchProfessors } from './professors';
+import { findProfessor, professorSlug, matchProfessors, likelySpellings } from './professors';
 
 describe('professors', () => {
   test('slugs match the API', () => {
@@ -42,5 +42,19 @@ describe('matchProfessors', () => {
 
   test('an empty search lists everyone, up to the limit', () => {
     expect(matchProfessors(professors, '  ', 2)).toHaveLength(2);
+  });
+});
+
+describe('likelySpellings', () => {
+  test('groups spellings that share a surname, fullest name first', () => {
+    const names = ['Gonzalez Hernandez, A', 'González, Ana', 'Zhu, Z', 'Chen, J', 'Chen, Songqing', 'Staff', 'All Instructors', 'Kamberi'];
+    expect(likelySpellings(names)).toEqual([
+      ['Chen, Songqing', 'Chen, J'],
+      ['González, Ana', 'Gonzalez Hernandez, A'],
+    ]);
+  });
+
+  test('a single spelling is not a group', () => {
+    expect(likelySpellings(['Zhu, Ziwei', 'Yu, Craig'])).toEqual([]);
   });
 });
