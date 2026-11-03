@@ -28,7 +28,28 @@ const cs310 = {
   description: 'Fundamental data structures and their implementations.',
   prereqs: 'CS 211 (C) and MATH 113 (C)',
   offerings: [
-    { termKey: '2024-3', termLabel: 'Fall 2024', section: '001', instructors: ['Russell, K'], fileId: FILE_A, source: 'gmu-cs' },
+    {
+      termKey: '2024-3',
+      termLabel: 'Fall 2024',
+      section: '001',
+      instructors: ['Russell, K'],
+      fileId: FILE_A,
+      source: 'gmu-cs',
+      summary: {
+        summary: {
+          overview: 'Lists, trees and hash tables, built in Java.',
+          topics: ['Linked lists', 'Binary search trees'],
+          tools: ['Java'],
+          grading: [{ item: 'Projects', weight: '40%' }],
+          workload: ['5 programming projects'],
+          textbooks: [],
+          prerequisites: '',
+          policies: { lateWork: '', attendance: '', aiUse: 'Not allowed on projects.' },
+        },
+        provider: 'Gemini',
+        generatedAt: '2026-11-02T12:00:00Z',
+      },
+    },
     {
       termKey: '2024-3',
       termLabel: 'Fall 2024',

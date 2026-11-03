@@ -19,6 +19,12 @@ const OFFERING = {
 };
 
 const AI = { verdict: 'legit', reasons: ['A CS 310 syllabus.'] };
+const SUMMARY_RESULT = {
+  summary: { overview: 'Data structures in Java.', topics: ['Trees'] },
+  provider: 'Gemini',
+  model: 'gemini-3.5-flash-lite',
+  generatedAt: '2026-11-02T00:00:00.000Z',
+};
 
 function event(method, path, { query, body, headers } = {}) {
   return {
@@ -58,6 +64,9 @@ function fakes() {
       deleteOffering: jest.fn().mockResolvedValue(),
       putCourse: jest.fn().mockResolvedValue(),
       markCurated: jest.fn().mockResolvedValue(),
+      getSummaries: jest.fn().mockResolvedValue(new Map()),
+      putSummary: jest.fn().mockResolvedValue(),
+      deleteSummary: jest.fn().mockResolvedValue(),
       hitRateLimit: jest.fn().mockResolvedValue(true),
       ping: jest.fn().mockResolvedValue(),
     },
@@ -80,6 +89,7 @@ function fakes() {
     analyze: jest.fn().mockResolvedValue({ courseCodes: ['CS310'] }),
     readText: jest.fn().mockResolvedValue('CS 310 syllabus text'),
     checkUpload: jest.fn().mockResolvedValue(AI),
+    summarize: jest.fn().mockResolvedValue(SUMMARY_RESULT),
     search: { search: jest.fn(), refresh: jest.fn().mockResolvedValue() },
   };
 }
@@ -293,6 +303,24 @@ describe('admin', () => {
       expect.objectContaining({ code: 'CS310', title: 'Data Structures', term: expect.objectContaining({ key: '2024-3' }) })
     );
     expect(deps.uploads.review).toHaveBeenCalledWith(UPLOAD_ID, { status: 'approved', reviewer: 'admin@gmu.edu' });
+    expect(deps.files.read).toHaveBeenCalledWith('syllabi', FILE_ID);
+    expect(deps.summarize).toHaveBeenCalledWith('CS 310 syllabus text', { timeoutMs: 7000 });
+    expect(deps.catalog.putSummary).toHaveBeenCalledWith(FILE_ID, SUMMARY_RESULT);
+    expect(parse(res).summary).toBe('saved');
+  });
+
+  test('approving still works when the summary fails', async () => {
+    const deps = fakes();
+    deps.summarize.mockResolvedValue({ unavailable: 'Gemini timed out.' });
+    deps.catalog.putSummary.mockRejectedValue(new Error('not called'));
+    const res = await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good') }));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res).summary).toEqual({ unavailable: 'Gemini timed out.' });
+    expect(deps.catalog.putSummary).not.toHaveBeenCalled();
+
+    deps.summarize.mockRejectedValue(new Error('boom'));
+    const again = await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good') }));
+    expect(again.statusCode).toBe(200);
   });
 
   test('approving can correct the details the student entered', async () => {
@@ -417,6 +445,46 @@ describe('admin fixes to published syllabi', () => {
     expect(deps.catalog.markCurated).toHaveBeenCalledWith(OFFERING.sourceUrl, { action: 'deleted', by: 'admin@gmu.edu' });
     expect(deps.catalog.deleteOffering).toHaveBeenCalledWith(expect.objectContaining({ SK: OFFERING.SK }));
     expect(deps.files.remove).toHaveBeenCalledWith('syllabi', FILE_ID);
+    expect(deps.catalog.deleteSummary).toHaveBeenCalledWith(FILE_ID);
+  });
+
+  test('an admin can edit a summary, and the edit is cleaned and signed', async () => {
+    const deps = fakes();
+    deps.catalog.offeringsForFile.mockResolvedValue([OFFERING]);
+    deps.catalog.getSummaries.mockResolvedValue(new Map([[FILE_ID, SUMMARY_RESULT]]));
+    const summary = { overview: ' Fixed. ', topics: ['Graphs'], extra: 'x' };
+    const res = await createApp(deps)(post(`/api/admin/summaries/${FILE_ID}`, { summary }));
+    expect(res.statusCode).toBe(200);
+    const [fileId, record] = deps.catalog.putSummary.mock.calls[0];
+    expect(fileId).toBe(FILE_ID);
+    expect(record).toMatchObject({ model: 'gemini-3.5-flash-lite', editedBy: 'admin@gmu.edu' });
+    expect(record.summary).toMatchObject({ overview: 'Fixed.', topics: ['Graphs'], tools: [] });
+    expect(record.summary).not.toHaveProperty('extra');
+  });
+
+  test('an empty summary, an unknown file or a non-admin is turned away', async () => {
+    const deps = fakes();
+    const app = createApp(deps);
+    expect((await app(post(`/api/admin/summaries/${FILE_ID}`, { summary: {} }))).statusCode).toBe(404);
+    deps.catalog.offeringsForFile.mockResolvedValue([OFFERING]);
+    expect((await app(post(`/api/admin/summaries/${FILE_ID}`, { summary: { overview: ' ' } }))).statusCode).toBe(400);
+    expect((await app(post(`/api/admin/summaries/${FILE_ID}/regenerate`, {}, {}))).statusCode).toBe(401);
+    expect(deps.catalog.putSummary).not.toHaveBeenCalled();
+  });
+
+  test('regenerating asks the AI again, and says when it cannot', async () => {
+    const deps = fakes();
+    deps.catalog.offeringsForFile.mockResolvedValue([OFFERING]);
+    const app = createApp(deps);
+    const res = await app(post(`/api/admin/summaries/${FILE_ID}/regenerate`, {}));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res)).toEqual(SUMMARY_RESULT);
+    expect(deps.catalog.putSummary).toHaveBeenCalledWith(FILE_ID, SUMMARY_RESULT);
+
+    deps.summarize.mockResolvedValue({ unavailable: 'Gemini free quota used up.' });
+    const failed = await app(post(`/api/admin/summaries/${FILE_ID}/regenerate`, {}));
+    expect(failed.statusCode).toBe(503);
+    expect(parse(failed).error).toMatch(/quota/);
   });
 
   test('deleting an HTML syllabus also deletes its PDF copy', async () => {

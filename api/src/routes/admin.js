@@ -5,13 +5,27 @@ const { checkUpload: aiCheck } = require('../lib/ai');
 const { fileText } = require('../lib/text');
 const { aiReview } = require('../lib/review');
 const { renameProfessor } = require('../lib/rename');
+const { summarize: aiSummarize, cleanSummary } = require('../lib/ai');
+const { summarizeFile } = require('../lib/summary');
 
 const UUID = '([0-9a-f-]{36})';
+const FILE_ID = '([a-f0-9]{24})';
+// Lambda stops after 20 seconds, so the summary made while approving gets a short
+// wait; if it runs out, the admin can press "Regenerate" or the weekly job fills it in.
+const APPROVE_SUMMARY_MS = 7000;
 const NO_STORE = { 'Cache-Control': 'no-store' };
 // Uploaded HTML is untrusted: if it's ever opened directly, its scripts can't run.
 const HTML_SANDBOX = { 'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:" };
 
-module.exports = ({ catalog, files, uploads, search, checkUpload = aiCheck, readText = fileText }) => {
+module.exports = ({
+  catalog,
+  files,
+  uploads,
+  search,
+  checkUpload = aiCheck,
+  readText = fileText,
+  summarize = aiSummarize,
+}) => {
   async function requireAdmin(event) {
     const token = (header(event, 'authorization') || '').replace(/^Bearer\s+/i, '');
     if (!token) throw new HttpError(401, 'Sign in first');
@@ -34,6 +48,16 @@ module.exports = ({ catalog, files, uploads, search, checkUpload = aiCheck, read
     if (!courseTitle) throw new HttpError(400, `Add a course title for ${displayCourse(code)}`);
     if (courseTitle.length > 120) throw new HttpError(400, 'Course title is too long');
     return courseTitle;
+  }
+
+  // A missing summary never blocks the admin, so errors are logged and reported, not thrown.
+  async function trySummary(fileId, timeoutMs) {
+    try {
+      return await summarizeFile({ catalog, files, fileId, readText, summarize, timeoutMs });
+    } catch (err) {
+      console.error('summary failed', err);
+      return { unavailable: 'The summary could not be saved.' };
+    }
   }
 
   async function offering(code, id) {
@@ -143,7 +167,8 @@ module.exports = ({ catalog, files, uploads, search, checkUpload = aiCheck, read
           reviewer,
           ...(corrected && { changes }),
         });
-        return json(200, reviewed, NO_STORE);
+        const summary = await trySummary(upload.file_id, APPROVE_SUMMARY_MS);
+        return json(200, { ...reviewed, summary: summary.unavailable ? { unavailable: summary.unavailable } : 'saved' }, NO_STORE);
       },
     },
     {
@@ -237,6 +262,37 @@ module.exports = ({ catalog, files, uploads, search, checkUpload = aiCheck, read
       },
     },
     {
+      // Saves an admin's corrections to a summary. Kept until someone presses "Regenerate".
+      method: 'POST',
+      path: new RegExp(`^/api/admin/summaries/${FILE_ID}$`),
+      async handler({ event, params }) {
+        const reviewer = await requireAdmin(event);
+        const fileId = params[0];
+        if ((await catalog.offeringsForFile(fileId)).length === 0) throw new HttpError(404, 'Syllabus not found');
+        const summary = cleanSummary(bodyJson(event).summary);
+        if (!summary.overview && summary.topics.length === 0) {
+          throw new HttpError(400, 'Add an overview or at least one topic');
+        }
+        const old = (await catalog.getSummaries([fileId])).get(fileId) || {};
+        const record = { ...old, summary, editedBy: reviewer, editedAt: new Date().toISOString() };
+        await catalog.putSummary(fileId, record);
+        return json(200, record, NO_STORE);
+      },
+    },
+    {
+      // Asks the AI for a fresh summary, replacing any edits.
+      method: 'POST',
+      path: new RegExp(`^/api/admin/summaries/${FILE_ID}/regenerate$`),
+      async handler({ event, params }) {
+        await requireAdmin(event);
+        const fileId = params[0];
+        if ((await catalog.offeringsForFile(fileId)).length === 0) throw new HttpError(404, 'Syllabus not found');
+        const record = await trySummary(fileId, 15000);
+        if (record.unavailable) throw new HttpError(503, `AI summary unavailable: ${record.unavailable}`);
+        return json(200, record, NO_STORE);
+      },
+    },
+    {
       // Takes a syllabus off the site. The file is deleted once no course points at it.
       method: 'POST',
       path: /^\/api\/admin\/offerings\/delete$/,
@@ -250,6 +306,7 @@ module.exports = ({ catalog, files, uploads, search, checkUpload = aiCheck, read
         if (remaining.length === 0) {
           await files.remove('syllabi', old.fileId);
           if (old.pdfFileId) await files.remove('syllabi', old.pdfFileId);
+          await catalog.deleteSummary(old.fileId);
         }
         await refreshSearch(old.fileId);
         return json(200, { deleted: true, fileDeleted: remaining.length === 0 }, NO_STORE);

@@ -33,6 +33,25 @@ test('course page groups syllabi by term, newest first', async ({ page }) => {
   await expect(first).toHaveAttribute('target', '_blank');
 });
 
+test('a syllabus summary opens under its card', async ({ page }) => {
+  await page.goto('/courses/CS310');
+  // Only the first syllabus has a summary.
+  const toggle = page.getByRole('button', { name: 'Summary' });
+  await expect(toggle).toHaveCount(1);
+  await expect(page.getByTestId('syllabus-summary')).toHaveCount(0);
+
+  await toggle.click();
+  const summary = page.getByTestId('syllabus-summary');
+  await expect(summary).toContainText('Lists, trees and hash tables');
+  await expect(summary.getByText('Binary search trees')).toBeVisible();
+  await expect(summary.getByRole('cell', { name: '40%' })).toBeVisible();
+  await expect(summary).toContainText('AI tools: Not allowed on projects.');
+  await expect(summary).toContainText('AI summary by Gemini, Nov 2, 2026');
+
+  await toggle.click();
+  await expect(summary).toHaveCount(0);
+});
+
 test('filter a course by professor', async ({ page }) => {
   await page.goto('/courses/CS310');
   await page.getByLabel('Professor').click();
