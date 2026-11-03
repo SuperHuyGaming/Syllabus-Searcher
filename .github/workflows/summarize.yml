@@ -26,6 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Both sites share one AI key, and running them at once goes over the free
+      # per-minute limit, so they take turns.
+      max-parallel: 1
       matrix:
         environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production","staging"]') }}
     environment: ${{ matrix.environment }}
