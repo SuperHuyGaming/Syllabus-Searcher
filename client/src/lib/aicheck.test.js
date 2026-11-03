@@ -13,7 +13,7 @@ describe('aiCheckMessage', () => {
       reasons: ["Doesn't match the entered section."],
       matches: { course: 'yes', term: 'yes', section: 'no', instructor: 'maybe' },
       provider: 'Gemini',
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash-lite',
       redacted: 2,
       truncated: true,
     });
@@ -27,7 +27,7 @@ describe('aiCheckMessage', () => {
       { field: 'instructor', value: 'unclear' },
     ]);
     expect(message.footer).toBe(
-      'Gemini gemini-2.5-flash · 2 emails, phone numbers or IDs hidden before sending · only the first 20,000 characters were read'
+      'Gemini gemini-3.5-flash-lite · 2 emails, phone numbers or IDs hidden before sending · only the first 20,000 characters were read'
     );
   });
 

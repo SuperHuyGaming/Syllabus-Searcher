@@ -71,7 +71,7 @@ describe('checkUpload', () => {
     const result = await checkUpload(long, DETAILS, { fetchImpl });
 
     const [url, init] = fetchImpl.mock.calls[0];
-    expect(url).toContain('/models/gemini-2.5-flash:generateContent');
+    expect(url).toContain('/models/gemini-3.5-flash-lite:generateContent');
     expect(init.headers['x-goog-api-key']).toBe('gem-key');
     const prompt = JSON.parse(init.body).contents[0].parts[0].text;
     expect(prompt).toContain('Course: CS 310 (Data Structures)');
@@ -79,7 +79,7 @@ describe('checkUpload', () => {
     expect(prompt).not.toContain('ada@gmu.edu');
     expect(prompt.length).toBeLessThan(21000);
 
-    expect(result).toMatchObject({ verdict: 'legit', provider: 'Gemini', model: 'gemini-2.5-flash', redacted: 1, truncated: true });
+    expect(result).toMatchObject({ verdict: 'legit', provider: 'Gemini', model: 'gemini-3.5-flash-lite', redacted: 1, truncated: true });
     expect(result.reasons).toEqual(GOOD.reasons);
   });
 
