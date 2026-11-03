@@ -6,9 +6,13 @@
 //   PK=RATE#<ipHash>  SK=<hour>                           -> upload rate limit (TTL)
 //   PK=CURATED        SK=<sourceUrl>                      -> scraped file an admin edited or deleted;
 //                                                            the scraper leaves it alone from then on
+//   PK=SUMMARY        SK=<fileId>                         -> AI summary of one syllabus file. Kept apart
+//                                                            from the offering, which the weekly scrape
+//                                                            rewrites; a cross-listed file shares one
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient,
+  BatchGetCommand,
   QueryCommand,
   ScanCommand,
   UpdateCommand,
@@ -99,6 +103,8 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
           contentType,
           source,
         }));
+      const summaries = await this.getSummaries(offerings.map((o) => o.fileId));
+      for (const o of offerings) o.summary = summaries.get(o.fileId) || null;
       return {
         code,
         display: displayCourse(code),
@@ -246,6 +252,43 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
           Item: { PK: 'CURATED', SK: sourceUrl, action, by, at: new Date().toISOString() },
         })
       );
+    },
+
+    // Summaries for these files, as a Map of fileId -> { summary, provider, model, generatedAt, editedBy }.
+    async getSummaries(fileIds) {
+      const ids = [...new Set(fileIds.filter(Boolean))];
+      const found = new Map();
+      for (let i = 0; i < ids.length; i += 100) {
+        let keys = ids.slice(i, i + 100).map((id) => ({ PK: 'SUMMARY', SK: id }));
+        // DynamoDB may hand back some keys unread when it's busy; ask again for those.
+        for (let tries = 0; keys?.length && tries < 5; tries += 1) {
+          const res = await db.send(new BatchGetCommand({ RequestItems: { [tableName]: { Keys: keys } } }));
+          for (const item of res.Responses?.[tableName] || []) {
+            const { summary, provider, model, generatedAt, editedBy, editedAt } = item;
+            found.set(item.SK, { summary, provider, model, generatedAt, editedBy, editedAt });
+          }
+          keys = res.UnprocessedKeys?.[tableName]?.Keys;
+        }
+      }
+      return found;
+    },
+
+    // Files that already have a summary, so the backfill only sends new ones.
+    async summarizedFileIds() {
+      const items = await queryAll({
+        KeyConditionExpression: 'PK = :pk',
+        ExpressionAttributeValues: { ':pk': 'SUMMARY' },
+        ProjectionExpression: 'SK',
+      });
+      return new Set(items.map((item) => item.SK));
+    },
+
+    async putSummary(fileId, record) {
+      await db.send(new PutCommand({ TableName: tableName, Item: { PK: 'SUMMARY', SK: fileId, ...record } }));
+    },
+
+    async deleteSummary(fileId) {
+      await db.send(new DeleteCommand({ TableName: tableName, Key: { PK: 'SUMMARY', SK: fileId } }));
     },
 
     // Returns false once the caller has used up its uploads for this hour.

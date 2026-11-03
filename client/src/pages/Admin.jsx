@@ -28,6 +28,7 @@ import { displayCourse } from '../lib/courses';
 import { likelySpellings } from '../lib/professors';
 import { fileCheckMessage } from '../lib/filecheck';
 import { aiCheckMessage } from '../lib/aicheck';
+import { POLICIES, formToSummary, hasSummary, summaryCredit, summaryToForm } from '../lib/summary';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
 import ErrorBoundary from '../components/ErrorBoundary';
 
@@ -642,6 +643,7 @@ function OfferingRow({ code, offering, token }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [form, setForm] = useState(null);
   const refresh = () =>
     Promise.all(
@@ -715,12 +717,93 @@ function OfferingRow({ code, offering, token }) {
         ) : (
           <>
             <Button onClick={startEditing}>Edit</Button>
+            <Button onClick={() => setSummaryOpen(true)}>{hasSummary(offering.summary?.summary) ? 'Summary' : 'Add summary'}</Button>
             <Button color="error" onClick={() => setConfirming(true)}>
               Delete
             </Button>
           </>
         )}
       </CardActions>
+      {summaryOpen && (
+        <SummaryEditor
+          fileId={offering.fileId}
+          record={offering.summary}
+          token={token}
+          onClose={() => setSummaryOpen(false)}
+          onSaved={refresh}
+        />
+      )}
     </Card>
+  );
+}
+
+const SUMMARY_FIELDS = [
+  { field: 'overview', label: 'Overview', rows: 3 },
+  { field: 'topics', label: 'Topics (one per line)', rows: 4 },
+  { field: 'tools', label: 'Languages and tools (one per line)', rows: 2 },
+  { field: 'grading', label: 'Grading (one per line, e.g. "Projects: 40%")', rows: 4 },
+  { field: 'workload', label: 'Workload (one per line)', rows: 3 },
+  { field: 'textbooks', label: 'Textbooks (one per line)', rows: 2 },
+  { field: 'prerequisites', label: 'Background and prerequisites', rows: 2 },
+  ...POLICIES.map(({ field, label }) => ({ field, label: `${label} policy`, rows: 2 })),
+];
+
+// Edit a syllabus summary by hand, or ask the AI for a new one. Cross-listed
+// syllabi share one file, so a change shows under every course that lists it.
+function SummaryEditor({ fileId, record, token, onClose, onSaved }) {
+  const [form, setForm] = useState(() => summaryToForm(record?.summary));
+  const save = useMutation({
+    mutationFn: () => api.saveSummary(fileId, formToSummary(form), token),
+    onSuccess: async () => {
+      await onSaved();
+      onClose();
+    },
+  });
+  const regenerate = useMutation({
+    mutationFn: () => api.regenerateSummary(fileId, token),
+    onSuccess: async (fresh) => {
+      setForm(summaryToForm(fresh.summary));
+      await onSaved();
+    },
+  });
+  const busy = save.isPending || regenerate.isPending;
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="md">
+      <DialogTitle>Syllabus summary</DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {record ? summaryCredit(record) : 'No summary yet. Regenerate asks the AI for one.'}
+          {record?.editedBy && ` (${record.editedBy})`}. Students see this on the course page.
+        </Typography>
+        <Stack spacing={2}>
+          {SUMMARY_FIELDS.map(({ field, label, rows }) => (
+            <TextField
+              key={field}
+              label={label}
+              value={form[field]}
+              onChange={(e) => setForm({ ...form, [field]: e.target.value })}
+              multiline
+              minRows={rows}
+              disabled={busy}
+            />
+          ))}
+        </Stack>
+        {(save.error || regenerate.error) && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {(save.error || regenerate.error).message}
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => regenerate.mutate()} loading={regenerate.isPending} disabled={save.isPending}>
+          Regenerate
+        </Button>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={regenerate.isPending}>
+          Save
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

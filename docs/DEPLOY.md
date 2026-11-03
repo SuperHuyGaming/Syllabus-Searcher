@@ -77,7 +77,7 @@ Then in each environment → **Add environment secret** for each row. Values mar
 | `ORIGIN_SECRET` | any random 32+ characters (different per environment) |
 | `IP_HASH_SALT` | any random 16+ characters (different per environment) |
 | `AZURE_DI_ENDPOINT`, `AZURE_DI_KEY` | from step 4, or leave out |
-| `AI_API_KEY` | Gemini API key from aistudio.google.com/apikey (*same*), or leave out to turn the AI check off |
+| `AI_API_KEY` | Gemini API key from aistudio.google.com/apikey (*same*), or leave out to turn the AI check and syllabus summaries off |
 | `AI_FALLBACK_API_KEY` | Groq API key from console.groq.com/keys (*same*), or leave out |
 
 Optional environment variables (not secrets): `AI_PROVIDER` (`gemini` or `groq`, default `gemini`), `AI_MODEL`, `AI_FALLBACK_PROVIDER` (set it to `groq` to use the fallback key), `AI_FALLBACK_MODEL`. Empty models use the defaults in `api/src/lib/ai.js`.
@@ -95,6 +95,7 @@ Do this for `staging` first, then `production`.
 3. **Switch CloudFront to the Free plan:** CloudFront console → Pricing plans (or the distribution → Pricing plan) → choose **Free**.
    This is what guarantees no overage charges. It can't be done from the template. If AWS won't put a second distribution on the Free plan, delete the staging stack when you're not using it (CloudFormation → `syllabus-searcher-staging` → Delete; empty its site bucket first) and redeploy it when needed.
 4. Actions → **Scrape syllabi** → Run workflow → pick the environment. This loads the course catalog and syllabi into its DynamoDB table and database.
+   Then Actions → **Summarize syllabi** → Run workflow writes the course page summaries, up to 40 files per run (run it again until the summary says none are left). It also runs every Monday after the scrape.
 5. Settings → Environments → the environment → **Add environment variable** `SITE_URL` with the site URL.
    This turns on the keep-alive workflow for it, so its Supabase project and Atlas don't pause.
 6. In that environment's Supabase project, Authentication → URL Configuration, set the Site URL to the site URL and add `<site URL>/admin` as a redirect URL.
