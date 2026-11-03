@@ -173,7 +173,7 @@ test('the AI verdict shows on the card and can be run again with corrected detai
     reasons: ["Doesn't match the entered section."],
     matches: { course: 'yes', term: 'yes', section: 'no', instructor: 'unclear' },
     provider: 'Gemini',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.5-flash-lite',
     checkedAt: '2026-11-02T15:00:00Z',
   };
   let sent;
@@ -190,7 +190,7 @@ test('the AI verdict shows on the card and can be run again with corrected detai
   await expect(page.getByText('AI check: needs a closer look')).toBeVisible();
   await expect(page.getByText("Doesn't match the entered section.")).toBeVisible();
   await expect(page.getByText('section ✗')).toBeVisible();
-  await expect(page.getByText(/Gemini gemini-2.5-flash/)).toBeVisible();
+  await expect(page.getByText(/Gemini gemini-3.5-flash-lite/)).toBeVisible();
 
   await page.getByLabel('Section').fill('002');
   await page.getByRole('button', { name: 'Run again' }).click();

@@ -76,7 +76,8 @@ async function send(fetchImpl, url, init, timeoutMs) {
 const PROVIDERS = {
   gemini: {
     label: 'Gemini',
-    model: 'gemini-2.5-flash',
+    // Google's replacement for gemini-2.5-flash, which new keys can no longer use (404).
+    model: 'gemini-3.5-flash-lite',
     async ask({ model, key, system, prompt, fetchImpl, timeoutMs }) {
       const body = await send(
         fetchImpl,
