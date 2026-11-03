@@ -1,5 +1,6 @@
 // Renames a professor on every syllabus that lists them (see src/lib/rename.js).
-// Shows what would change unless --apply is given.
+// Shows what would change unless --apply is given. The admin page does the same
+// from /admin → Professors; this script is for doing it from the command line.
 //
 //   node scripts/rename-professor.js "Yu, L" "Yu, Craig"           # dry run
 //   node scripts/rename-professor.js "Yu, L" "Yu, Craig" --apply

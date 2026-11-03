@@ -206,3 +206,44 @@ test('an upload without an AI check offers to run one', async ({ page }) => {
   await expect(page.getByText('No AI check yet.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run AI check' })).toBeVisible();
 });
+
+test('admin merges two spellings of a professor after a preview', async ({ page }) => {
+  let names = [
+    { name: 'Gonzalez Hernandez, A', count: 2, courses: ['CS 580'] },
+    { name: 'González, Ana', count: 1, courses: ['CS 584'] },
+    { name: 'Yu, Craig', count: 3, courses: ['CS 351'] },
+  ];
+  const sent = [];
+  await signIn(page);
+  await mockAdminApi(page);
+  await page.route('**/api/admin/professors**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/admin/professors') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ professors: names }) });
+    }
+    const body = route.request().postDataJSON();
+    sent.push(body);
+    const changes = [
+      { code: 'CS580', term: 'Fall 2024', section: '001', before: ['Gonzalez Hernandez, A'], after: ['González, Ana'] },
+      { code: 'CS580', term: 'Spring 2025', section: '002', before: ['Gonzalez Hernandez, A'], after: ['González, Ana'] },
+    ];
+    if (body.apply) names = names.filter((n) => n.name !== body.from);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ applied: Boolean(body.apply), changes }) });
+  });
+
+  await page.goto('/admin');
+  await page.getByRole('tab', { name: 'Professors' }).click();
+  await page.getByRole('button', { name: 'Gonzalez Hernandez, A → González, Ana' }).click();
+  await expect(page.getByLabel('Replace this spelling')).toHaveValue('Gonzalez Hernandez, A');
+  await expect(page.getByLabel('With this name')).toHaveValue('González, Ana');
+
+  await page.getByRole('button', { name: 'Preview merge' }).click();
+  await expect(page.getByText('2 syllabi will change:')).toBeVisible();
+  await expect(page.getByText('CS 580 Spring 2025, section 002: Gonzalez Hernandez, A → González, Ana')).toBeVisible();
+  expect(sent).toEqual([{ from: 'Gonzalez Hernandez, A', into: 'González, Ana' }]);
+
+  await page.getByRole('button', { name: 'Merge', exact: true }).click();
+  await expect(page.getByText('Merged "Gonzalez Hernandez, A" into "González, Ana" on 2 syllabi.')).toBeVisible();
+  expect(sent[1]).toEqual({ from: 'Gonzalez Hernandez, A', into: 'González, Ana', apply: true });
+  await expect(page.getByRole('button', { name: /→ González, Ana/ })).toHaveCount(0);
+});

@@ -436,6 +436,81 @@ describe('admin fixes to published syllabi', () => {
   });
 });
 
+describe('admin professor merge', () => {
+  const auth = { authorization: 'Bearer good' };
+  const post = (body, headers = auth) =>
+    event('POST', '/api/admin/professors/merge', { headers, body: JSON.stringify(body) });
+  const withNames = () => {
+    const deps = fakes();
+    deps.catalog.listOfferings = jest.fn().mockResolvedValue([
+      { code: 'CS580', display: 'CS 580', instructors: ['Gonzalez Hernandez, A'] },
+      { code: 'CS584', display: 'CS 584', instructors: ['González, Ana', 'Zhu, Z'] },
+      { code: 'CS580', display: 'CS 580', instructors: ['Gonzalez Hernandez, A'] },
+    ]);
+    deps.catalog.offeringsByInstructor = jest.fn().mockResolvedValue([
+      { ...OFFERING, instructors: ['Gonzalez Hernandez, A'] },
+    ]);
+    return deps;
+  };
+
+  test('needs a signed-in admin', async () => {
+    const deps = withNames();
+    const app = createApp(deps);
+    expect((await app(event('GET', '/api/admin/professors'))).statusCode).toBe(401);
+    expect((await app(post({ from: 'Gonzalez Hernandez, A', into: 'González, Ana', apply: true }, {}))).statusCode).toBe(401);
+    expect(deps.catalog.updateOffering).not.toHaveBeenCalled();
+  });
+
+  test('lists every stored spelling with its count and courses', async () => {
+    const res = await createApp(withNames())(event('GET', '/api/admin/professors', { headers: auth }));
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['Cache-Control']).toBe('no-store');
+    expect(parse(res).professors).toEqual([
+      { name: 'Gonzalez Hernandez, A', count: 2, courses: ['CS 580'] },
+      { name: 'González, Ana', count: 1, courses: ['CS 584'] },
+      { name: 'Zhu, Z', count: 1, courses: ['CS 584'] },
+    ]);
+  });
+
+  test('a preview lists the changes and writes nothing', async () => {
+    const deps = withNames();
+    const res = await createApp(deps)(post({ from: 'Gonzalez Hernandez, A', into: 'González, Ana' }));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res)).toEqual({
+      applied: false,
+      changes: [
+        { code: 'CS580', term: 'Fall 2024', section: '001', before: ['Gonzalez Hernandez, A'], after: ['González, Ana'] },
+      ],
+    });
+    expect(deps.catalog.updateOffering).not.toHaveBeenCalled();
+    expect(deps.catalog.markCurated).not.toHaveBeenCalled();
+  });
+
+  test('applying rewrites each syllabus, remembers the fix and refreshes search', async () => {
+    const deps = withNames();
+    const res = await createApp(deps)(post({ from: 'Gonzalez Hernandez, A', into: 'González, Ana', apply: true }));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res).applied).toBe(true);
+    expect(deps.catalog.updateOffering).toHaveBeenCalledWith(
+      expect.objectContaining({ SK: OFFERING.SK }),
+      expect.objectContaining({ code: 'CS580', instructors: ['González, Ana'] })
+    );
+    expect(deps.catalog.markCurated).toHaveBeenCalledWith(OFFERING.sourceUrl, { action: 'edited', by: 'admin@gmu.edu' });
+    expect(deps.search.refresh).toHaveBeenCalledWith(FILE_ID, []);
+  });
+
+  test('rejects a blank or unchanged name and 404s for a name no syllabus lists', async () => {
+    const deps = withNames();
+    const app = createApp(deps);
+    expect((await app(post({ from: '', into: 'González, Ana' }))).statusCode).toBe(400);
+    expect((await app(post({ from: 'Zhu, Z', into: '' }))).statusCode).toBe(400);
+    expect((await app(post({ from: 'Zhu, Z', into: 'Zhu, Z' }))).statusCode).toBe(400);
+    deps.catalog.offeringsByInstructor.mockResolvedValue([]);
+    const res = await app(post({ from: 'Nobody, N', into: 'Zhu, Z' }));
+    expect(res.statusCode).toBe(404);
+  });
+});
+
 describe('routing', () => {
   test('unknown paths 404 and wrong methods 405', async () => {
     const app = createApp(fakes());

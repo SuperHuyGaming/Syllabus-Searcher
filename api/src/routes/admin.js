@@ -4,6 +4,7 @@ const { parseDetails, parseCourse, parseTermInput, parseSection, parseInstructor
 const { checkUpload: aiCheck } = require('../lib/ai');
 const { fileText } = require('../lib/text');
 const { aiReview } = require('../lib/review');
+const { renameProfessor } = require('../lib/rename');
 
 const UUID = '([0-9a-f-]{36})';
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -192,6 +193,47 @@ module.exports = ({ catalog, files, uploads, search, checkUpload = aiCheck, read
         await catalog.markCurated(old.sourceUrl, { action: 'edited', by: reviewer });
         await refreshSearch(old.fileId);
         return json(200, { code: updated.code, id: updated.SK }, NO_STORE);
+      },
+    },
+    {
+      // Every professor name as it's stored, one entry per spelling, so the admin can
+      // spot two spellings of one person. The public list groups some of these together.
+      method: 'GET',
+      path: /^\/api\/admin\/professors$/,
+      async handler({ event }) {
+        await requireAdmin(event);
+        const byName = new Map();
+        for (const o of await catalog.listOfferings()) {
+          for (const name of o.instructors || []) {
+            if (!byName.has(name)) byName.set(name, { name, count: 0, courses: new Set() });
+            const entry = byName.get(name);
+            entry.count += 1;
+            entry.courses.add(o.display || displayCourse(o.code));
+          }
+        }
+        const professors = [...byName.values()]
+          .map((p) => ({ ...p, courses: [...p.courses].sort() }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        return json(200, { professors }, NO_STORE);
+      },
+    },
+    {
+      // Merges one spelling of a professor into another on every syllabus that lists it.
+      // Without "apply" it only lists what would change, so the admin can check first.
+      method: 'POST',
+      path: /^\/api\/admin\/professors\/merge$/,
+      async handler({ event }) {
+        const reviewer = await requireAdmin(event);
+        const { from, into, apply } = bodyJson(event);
+        let changes;
+        try {
+          changes = await renameProfessor({ catalog, search }, from, into, { apply: apply === true, by: reviewer });
+        } catch (err) {
+          if (err instanceof HttpError) throw err;
+          throw new HttpError(400, err.message);
+        }
+        if (changes.length === 0) throw new HttpError(404, `No syllabi list "${String(from).trim()}"`);
+        return json(200, { applied: apply === true, changes }, NO_STORE);
       },
     },
     {

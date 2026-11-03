@@ -7,7 +7,7 @@ Look up a GMU Computer Science course, see which professors taught it each term 
 - **Inside syllabi**: full-text search for a language, textbook or policy (`Python`, `"late policy"`), with highlighted snippets.
 - **Uploads**: students can add missing syllabi as a PDF or, when the professor posted it as a web page, an HTML file; an admin approves them before they show up. Uploaded PDFs are rebuilt page by page with scripts, auto-run actions and attachments removed; encrypted or unreadable files are refused. The admin reviews each file on the page (PDFs drawn with pdf.js, with the page text alongside), so it never opens in a desktop reader.
 - **PDF for every syllabus**: syllabi that exist only as web pages get a PDF copy (printed by headless Chromium with scripts and network off), shown as a "PDF" button.
-- **Admin fixes**: at `/admin`, correct an upload's course, term, section or professor before approving, and move, edit or delete any published syllabus. Fixes to scraped syllabi survive the weekly re-scrape.
+- **Admin fixes**: at `/admin`, correct an upload's course, term, section or professor before approving, move, edit or delete any published syllabus, and merge two spellings of one professor across every syllabus at once. Fixes to scraped syllabi survive the weekly re-scrape.
 
 ## How it fits together
 

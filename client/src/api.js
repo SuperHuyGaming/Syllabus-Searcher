@@ -39,4 +39,7 @@ export const api = {
   adminCourse: (code, token) => json(`/admin/courses/${encodeURIComponent(code)}`, { token }),
   updateOffering: (changes, token) => post('/admin/offerings/update', changes, token),
   deleteOffering: ({ code, id }, token) => post('/admin/offerings/delete', { code, id }, token),
+  adminProfessors: (token) => json('/admin/professors', { token }),
+  // Without `apply` this is a preview: it lists what would change and writes nothing.
+  mergeProfessors: ({ from, into, apply }, token) => post('/admin/professors/merge', { from, into, apply }, token),
 };
