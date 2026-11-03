@@ -7,7 +7,7 @@ Look up a GMU Computer Science course, see which professors taught it each term 
 - **Inside syllabi**: full-text search for a language, textbook or policy (`Python`, `"late policy"`), with highlighted snippets.
 - **Uploads**: students can add missing syllabi as a PDF or, when the professor posted it as a web page, an HTML file; an admin approves them before they show up. Uploaded PDFs are rebuilt page by page with scripts, auto-run actions and attachments removed; encrypted or unreadable files are refused. The admin reviews each file on the page (PDFs drawn with pdf.js, with the page text alongside), so it never opens in a desktop reader.
 - **PDF for every syllabus**: syllabi that exist only as web pages get a PDF copy (printed by headless Chromium with scripts and network off), shown as a "PDF" button.
-- **Admin fixes**: at `/admin`, correct an upload's course, term, section or professor before approving, and move, edit or delete any published syllabus. Fixes to scraped syllabi survive the weekly re-scrape.
+- **Admin fixes**: at `/admin`, correct an upload's course, term, section or professor before approving, move, edit or delete any published syllabus, and merge two spellings of one professor across every syllabus at once. Fixes to scraped syllabi survive the weekly re-scrape.
 
 ## How it fits together
 
@@ -73,6 +73,8 @@ Create a Document Intelligence resource on the F0 tier and put its endpoint and 
 ### AI check of uploads (optional, free tiers)
 
 Put a Gemini API key (aistudio.google.com/apikey) in `AI_API_KEY`, and optionally a Groq key in `AI_FALLBACK_API_KEY`. Each upload's text is then sent to the model, which says whether it looks like a syllabus and whether it matches the course, term, section and instructor the student entered. The review card shows the verdict with its reasons, flags a syllabus already on the site for that section, and has a "Run again" button that checks the details as corrected on the card. Before sending, emails, phone numbers and G-numbers are replaced and the text is cut to 20,000 characters, since free tiers may keep prompts. When no key is set or the quota runs out, the card says "AI check unavailable" and the admin reviews by hand. The admin always decides; nothing is approved automatically.
+
+The same key also writes a short summary of each syllabus for its course page: topics, languages and tools, grading breakdown, workload, textbooks and the late work, attendance and AI policies. Students open it with the "Summary" button on a syllabus, so they can compare how professors teach the same course. An upload is summarized when it's approved; scraped syllabi are filled in by the weekly **Summarize syllabi** workflow (`api/scripts/summarize.js`, or `npm run summarize` in `api/` locally), a batch per run to stay inside the free quota. Summaries are stored per file (`PK=SUMMARY`), so a re-scrape keeps them. In /admin → Published syllabi, "Summary" on any syllabus edits a summary or regenerates it.
 
 ## Where the courses and syllabi come from
 

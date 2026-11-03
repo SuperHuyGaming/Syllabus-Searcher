@@ -1,0 +1,68 @@
+# Writes AI summaries for syllabi that don't have one yet (api/scripts/summarize.js),
+# for both environments. Runs after the weekly scrape, and on demand for the first
+# backfill. Free AI tiers cap requests per day, so each run does a limited batch.
+name: Summarize syllabi
+
+on:
+  schedule:
+    - cron: '0 11 * * 1' # Mondays 11:00 UTC, two hours after the scrape
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which site to summarize
+        type: choice
+        options: [staging, production]
+        default: staging
+      limit:
+        description: Most files to summarize in this run
+        default: '40'
+      redo:
+        description: Also replace existing summaries, including admin edits
+        type: boolean
+        default: false
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production","staging"]') }}
+    environment: ${{ matrix.environment }}
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+        run: echo "ready=${{ env.MONGODB_URI != '' && env.AI_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        if: steps.check.outputs.ready == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Summarize
+        if: steps.check.outputs.ready == 'true'
+        working-directory: api
+        env:
+          LIMIT: ${{ inputs.limit || '40' }}
+          REDO: ${{ inputs.redo && '--redo' || '' }}
+          # Same names the deploy workflow gives each environment's stack and database.
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ matrix.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
+          TABLE_NAME: ${{ matrix.environment == 'production' && 'syllabus-searcher-catalog' || 'syllabus-searcher-staging-catalog' }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_FALLBACK_PROVIDER: ${{ vars.AI_FALLBACK_PROVIDER }}
+          AI_FALLBACK_MODEL: ${{ vars.AI_FALLBACK_MODEL }}
+          AI_FALLBACK_API_KEY: ${{ secrets.AI_FALLBACK_API_KEY }}
+        run: |
+          npm ci --omit=dev
+          node scripts/summarize.js --limit "$LIMIT" $REDO | tee -a "$GITHUB_STEP_SUMMARY"

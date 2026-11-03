@@ -1,5 +1,5 @@
 const config = require('../src/config');
-const { checkUpload, redact, parseAnswer } = require('../src/lib/ai');
+const { checkUpload, summarize, cleanSummary, redact, parseAnswer } = require('../src/lib/ai');
 const { htmlText } = require('../src/lib/text');
 
 const DETAILS = { course: 'CS 310', title: 'Data Structures', term: 'Fall 2024', section: '001', instructor: 'Ada Lovelace' };
@@ -146,5 +146,75 @@ describe('htmlText', () => {
   test('drops scripts, styles and tags and decodes entities', () => {
     const html = '<html><head><title>x</title></head><script>alert(1)</script><p>CS&nbsp;483 &amp; more&#33;</p><p>Next</p></html>';
     expect(htmlText(html).replace(/\s+/g, ' ').trim()).toBe('CS 483 & more! Next');
+  });
+});
+
+const SUMMARY = {
+  overview: 'Data structures in Java.',
+  prerequisites: 'CS 211 with a C or better.',
+  grading: [
+    { item: 'Projects', weight: '40%' },
+    { item: 'Exams', weight: '60%' },
+  ],
+  policies: { lateWork: 'Two late days.', attendance: 'Not graded.', aiUse: 'Not allowed on projects.' },
+  topics: ['Lists', 'Trees', 'Hash tables'],
+  tools: ['Java', 'Gradescope'],
+  textbooks: ['Data Structures, Weiss'],
+  workload: ['5 projects', '2 midterms and a final'],
+};
+
+describe('cleanSummary', () => {
+  test('keeps known fields, trims lists and fills in missing ones', () => {
+    const clean = cleanSummary({
+      overview: '  About trees. ',
+      topics: Array.from({ length: 20 }, (_, i) => `Topic ${i}`),
+      grading: [{ item: 'Exams', weight: 50 }, { weight: '10%' }, 'junk'],
+      policies: { aiUse: 'Ask first.', other: 'x' },
+      extra: 'x',
+    });
+    expect(clean.overview).toBe('About trees.');
+    expect(clean.topics).toHaveLength(12);
+    expect(clean.grading).toEqual([{ item: 'Exams', weight: '50' }]);
+    expect(clean.policies).toEqual({ lateWork: '', attendance: '', aiUse: 'Ask first.' });
+    expect(clean.tools).toEqual([]);
+    expect(clean).not.toHaveProperty('extra');
+  });
+
+  test('copes with nothing at all', () => {
+    expect(cleanSummary(null).topics).toEqual([]);
+  });
+});
+
+describe('summarize', () => {
+  test('sends redacted text and returns a clean summary', async () => {
+    useKeys();
+    const fetchImpl = jest.fn().mockResolvedValue(gemini({ ...SUMMARY, extra: 'x' }));
+    const result = await summarize(`${TEXT} Email ada@gmu.edu for help.`, { fetchImpl });
+    expect(result).toEqual(expect.objectContaining({ summary: SUMMARY, provider: 'Gemini', model: 'gemini-3.5-flash-lite' }));
+    expect(result.generatedAt).toEqual(expect.any(String));
+    const sent = JSON.parse(fetchImpl.mock.calls[0][1].body).contents[0].parts[0].text;
+    expect(sent).toContain('[email]');
+    expect(sent).not.toContain('ada@gmu.edu');
+  });
+
+  test('falls back to Groq, and turns down an empty answer', async () => {
+    useKeys({ fallback: true });
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(gemini({ overview: '', topics: [] }))
+      .mockResolvedValueOnce(groq(SUMMARY));
+    const result = await summarize(TEXT, { fetchImpl });
+    expect(result.provider).toBe('Groq');
+    expect(result.summary.topics).toEqual(SUMMARY.topics);
+  });
+
+  test('is unavailable without a key, without text, or when every provider fails', async () => {
+    Object.assign(config, { aiApiKey: '', aiFallbackApiKey: '' });
+    expect((await summarize(TEXT)).unavailable).toMatch(/AI_API_KEY/);
+    useKeys();
+    const fetchImpl = jest.fn().mockResolvedValue(status(429));
+    expect((await summarize('tiny', { fetchImpl })).unavailable).toMatch(/Almost no text/);
+    expect((await summarize(TEXT, { fetchImpl })).unavailable).toBe('Gemini free quota used up.');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

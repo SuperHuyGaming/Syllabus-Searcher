@@ -206,3 +206,101 @@ test('an upload without an AI check offers to run one', async ({ page }) => {
   await expect(page.getByText('No AI check yet.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run AI check' })).toBeVisible();
 });
+
+test('admin edits and regenerates a syllabus summary', async ({ page }) => {
+  const FILE = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+  let record = {
+    summary: { overview: 'Old overview.', topics: ['Trees'], tools: [], textbooks: [], workload: [], grading: [], policies: {} },
+    provider: 'Gemini',
+    generatedAt: '2026-11-02T12:00:00Z',
+  };
+  const saved = [];
+  await signIn(page);
+  await mockAdminApi(page);
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/courses?dept=CS', (route) =>
+    route.fulfill(json({ dept: 'CS', courses: [{ code: 'CS310', display: 'CS 310', title: 'Data Structures', hasSyllabi: true }] }))
+  );
+  await page.route('**/api/admin/courses/CS310', (route) =>
+    route.fulfill(
+      json({
+        code: 'CS310',
+        display: 'CS 310',
+        title: 'Data Structures',
+        offerings: [
+          { id: 'TERM#2024-3#SEC#001', termKey: '2024-3', termLabel: 'Fall 2024', section: '001', instructors: ['Russell, K'], fileId: FILE, source: 'gmu-cs', summary: record },
+        ],
+      })
+    )
+  );
+  await page.route(`**/api/admin/summaries/${FILE}**`, (route) => {
+    if (route.request().url().endsWith('/regenerate')) {
+      record = { ...record, summary: { ...record.summary, overview: 'Fresh from the AI.' } };
+    } else {
+      saved.push(route.request().postDataJSON().summary);
+      record = { ...record, summary: saved.at(-1), editedAt: '2026-11-03T12:00:00Z' };
+    }
+    return route.fulfill(json(record));
+  });
+
+  await page.goto('/admin');
+  await page.getByRole('tab', { name: 'Published syllabi' }).click();
+  await page.getByLabel('Course code').fill('CS 310');
+  await page.getByRole('button', { name: 'Summary' }).click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Overview')).toHaveValue('Old overview.');
+  await dialog.getByRole('button', { name: 'Regenerate' }).click();
+  await expect(dialog.getByLabel('Overview')).toHaveValue('Fresh from the AI.');
+
+  await dialog.getByLabel('Topics (one per line)').fill('Trees\nGraphs');
+  await dialog.getByLabel(/^Grading/).fill('Projects: 40%');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(saved[0]).toMatchObject({
+    overview: 'Fresh from the AI.',
+    topics: ['Trees', 'Graphs'],
+    grading: [{ item: 'Projects', weight: '40%' }],
+  });
+});
+
+test('admin merges two spellings of a professor after a preview', async ({ page }) => {
+  let names = [
+    { name: 'Gonzalez Hernandez, A', count: 2, courses: ['CS 580'] },
+    { name: 'González, Ana', count: 1, courses: ['CS 584'] },
+    { name: 'Yu, Craig', count: 3, courses: ['CS 351'] },
+  ];
+  const sent = [];
+  await signIn(page);
+  await mockAdminApi(page);
+  await page.route('**/api/admin/professors**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/admin/professors') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ professors: names }) });
+    }
+    const body = route.request().postDataJSON();
+    sent.push(body);
+    const changes = [
+      { code: 'CS580', term: 'Fall 2024', section: '001', before: ['Gonzalez Hernandez, A'], after: ['González, Ana'] },
+      { code: 'CS580', term: 'Spring 2025', section: '002', before: ['Gonzalez Hernandez, A'], after: ['González, Ana'] },
+    ];
+    if (body.apply) names = names.filter((n) => n.name !== body.from);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ applied: Boolean(body.apply), changes }) });
+  });
+
+  await page.goto('/admin');
+  await page.getByRole('tab', { name: 'Professors' }).click();
+  await page.getByRole('button', { name: 'Gonzalez Hernandez, A → González, Ana' }).click();
+  await expect(page.getByLabel('Replace this spelling')).toHaveValue('Gonzalez Hernandez, A');
+  await expect(page.getByLabel('With this name')).toHaveValue('González, Ana');
+
+  await page.getByRole('button', { name: 'Preview merge' }).click();
+  await expect(page.getByText('2 syllabi will change:')).toBeVisible();
+  await expect(page.getByText('CS 580 Spring 2025, section 002: Gonzalez Hernandez, A → González, Ana')).toBeVisible();
+  expect(sent).toEqual([{ from: 'Gonzalez Hernandez, A', into: 'González, Ana' }]);
+
+  await page.getByRole('button', { name: 'Merge', exact: true }).click();
+  await expect(page.getByText('Merged "Gonzalez Hernandez, A" into "González, Ana" on 2 syllabi.')).toBeVisible();
+  expect(sent[1]).toEqual({ from: 'Gonzalez Hernandez, A', into: 'González, Ana', apply: true });
+  await expect(page.getByRole('button', { name: /→ González, Ana/ })).toHaveCount(0);
+});

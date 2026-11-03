@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env scripts/local.js",
     "db:init": "node --env-file-if-exists=.env scripts/init-table.js",
+    "summarize": "node --env-file-if-exists=.env scripts/summarize.js",
     "test": "jest",
     "lint": "eslint ."
   },

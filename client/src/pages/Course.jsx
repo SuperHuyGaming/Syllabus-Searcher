@@ -8,6 +8,8 @@ import {
   Card,
   CardContent,
   Chip,
+  Collapse,
+  Divider,
   Link,
   MenuItem,
   Skeleton,
@@ -17,8 +19,13 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DescriptionIcon from '@mui/icons-material/Description';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SummarizeIcon from '@mui/icons-material/Summarize';
 import { api } from '../api';
 import SyllabusButtons from '../components/SyllabusButtons';
+import SyllabusSummary from '../components/SyllabusSummary';
+import { hasSummary } from '../lib/summary';
 import { groupByTerm, instructorsOf } from '../lib/terms';
 import { professorSlug } from '../lib/professors';
 
@@ -142,36 +149,7 @@ function CourseSyllabi({ code, term, setTerm, terms, instructor, setInstructor, 
             </Typography>
             <Stack spacing={1}>
               {group.offerings.map((o) => (
-                <Card key={o.fileId + o.section} variant="outlined">
-                  <CardContent
-                    sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', '&:last-child': { pb: 2 } }}
-                  >
-                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontWeight: 600 }}>
-                        {o.instructors.map((name, i) => (
-                          <span key={name}>
-                            {i > 0 && '; '}
-                            {PLACEHOLDER.test(name) ? (
-                              name
-                            ) : (
-                              <Link component={RouterLink} to={`/professors/${professorSlug(name)}`} color="inherit">
-                                {name}
-                              </Link>
-                            )}
-                          </span>
-                        ))}
-                      </Typography>
-                      <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                        <Chip size="small" label={`Section ${o.section}`} />
-                        {o.source === 'upload' && <Chip size="small" color="secondary" label="Student upload" />}
-                        {o.source === 'gmu-cs-filename' && (
-                          <Chip size="small" variant="outlined" label="Details from file name" />
-                        )}
-                      </Stack>
-                    </Box>
-                    <SyllabusButtons offering={o} />
-                  </CardContent>
-                </Card>
+                <OfferingCard key={o.fileId + o.section} offering={o} />
               ))}
             </Stack>
           </Box>
@@ -183,6 +161,55 @@ function CourseSyllabi({ code, term, setTerm, terms, instructor, setInstructor, 
         <UploadPrompt code={code} />
       </Box>
     </>
+  );
+}
+
+function OfferingCard({ offering: o }) {
+  const [open, setOpen] = useState(false);
+  const summarized = hasSummary(o.summary?.summary);
+  return (
+    <Card variant="outlined">
+      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', '&:last-child': { pb: 2 } }}>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 600 }}>
+            {o.instructors.map((name, i) => (
+              <span key={name}>
+                {i > 0 && '; '}
+                {PLACEHOLDER.test(name) ? (
+                  name
+                ) : (
+                  <Link component={RouterLink} to={`/professors/${professorSlug(name)}`} color="inherit">
+                    {name}
+                  </Link>
+                )}
+              </span>
+            ))}
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+            <Chip size="small" label={`Section ${o.section}`} />
+            {o.source === 'upload' && <Chip size="small" color="secondary" label="Student upload" />}
+            {o.source === 'gmu-cs-filename' && <Chip size="small" variant="outlined" label="Details from file name" />}
+          </Stack>
+        </Box>
+        {summarized && (
+          <Button
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            startIcon={<SummarizeIcon />}
+            endIcon={open ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          >
+            Summary
+          </Button>
+        )}
+        <SyllabusButtons offering={o} />
+        {summarized && (
+          <Collapse in={open} unmountOnExit sx={{ flexBasis: '100%' }}>
+            <Divider sx={{ mb: 2 }} />
+            <SyllabusSummary record={o.summary} />
+          </Collapse>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

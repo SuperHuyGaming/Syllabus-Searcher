@@ -47,11 +47,13 @@ Use free AI tiers only (see "Free AI options" below). Only send uploads that pas
 
 When an upload is approved (and once, as a backfill, for scraped syllabi):
 
-- [ ] Generate a structured summary per syllabus: what the course covers (main topics), prerequisites and expected background, languages/tools used, textbook(s), grading breakdown, workload (projects, exams, homework), notable policies (late work, attendance, AI use).
-- [ ] Store it on the offering in DynamoDB next to `fileId`, with the model and date it was generated.
-- [ ] Show it on the course page per professor and term, so students can compare how different professors teach the same course.
+- [x] Generate a structured summary per syllabus: what the course covers (main topics), prerequisites and expected background, languages/tools used, textbook(s), grading breakdown, workload (projects, exams, homework), notable policies (late work, attendance, AI use).
+- [x] Store it in DynamoDB with the model and date it was generated. It sits in its own item per file (`PK=SUMMARY`, `SK=<fileId>`) rather than on the offering, because the weekly scrape rewrites offerings and would drop it; a cross-listed syllabus shares one summary.
+- [x] Show it on the course page per professor and term ("Summary" button on each syllabus), so students can compare how different professors teach the same course.
 - [ ] Optional: a course-level rollup ("across all professors, CS 310 usually covers...").
-- [ ] Let the admin edit or regenerate a summary.
+- [x] Let the admin edit or regenerate a summary (/admin → Published syllabi → Summary).
+
+Built in `api/src/lib/ai.js` (`summarize`, `cleanSummary`) and `api/src/lib/summary.js`. Approving an upload summarizes it with a 7-second limit (Lambda stops at 20); if that runs out, "Regenerate" or the next weekly run fills it in. Scraped syllabi are backfilled by `api/scripts/summarize.js` from the **Summarize syllabi** workflow (Mondays after the scrape, and on demand), up to 40 files per run with the same Gemini key as the AI check rather than GitHub Models, so there's one provider to look after.
 
 ### 5. Catch wrong course codes and fix published syllabi (done)
 
@@ -63,7 +65,7 @@ Found in testing: a CS 584 syllabus was uploaded as CS 580, approved, and landed
 - [x] Admin "Published syllabi" tab: move, edit or delete any syllabus, scraped or uploaded. Fixes to scraped files are recorded (`PK=CURATED`) so the weekly scrape doesn't undo them.
 - [x] Full professor names: the scraper reads "Zhu, Ziwei" out of the syllabus text when the listing only says "Zhu, Z" or "Gonzalez".
 - [x] The AI check (item 3) also compares the course code in the PDF with the one entered.
-- [ ] Merge two spellings of one professor in one step from the admin page (today: edit each syllabus). Known case: "Gonzalez Hernandez, A" and "González, Ana". Until then, Actions → "Rename professor" does it per environment (`api/scripts/rename-professor.js`, dry run first).
+- [x] Merge two spellings of one professor in one step from the admin page: `/admin` → Professors lists every stored spelling, suggests likely duplicates ("Gonzalez Hernandez, A → González, Ana"), previews the change and then rewrites every syllabus at once (`POST /api/admin/professors/merge`, same code as `api/scripts/rename-professor.js`). Actions → "Rename professor" still works for scripted renames.
 
 ### 6. Show when the data was last updated
 
@@ -74,7 +76,10 @@ The cs.gmu.edu/syllabi/ page has returned 404 since late 2025 and the newest Int
 - [ ] Optional: say on the home page that new terms come from uploads, with a link to the Upload page.
 - [ ] Optional: a "Refresh now" button on the admin page that starts the Scrape syllabi workflow through the GitHub API (`workflow_dispatch`, fine-grained token with Actions write on this repo only, kept in the environment secrets). Low value while the source page is offline; today the same thing is Actions → Scrape syllabi → Run workflow.
 
-Known gap: CS 405 has no syllabus. Its only listing (Spring 2025, `CS_405All_InstructorsAll.html`) was never captured by the Internet Archive, so it has to come from an upload.
+Known gaps (checked 2026-11-02):
+
+- CS 405 has no syllabus. Its listings (Fall 2024 and Spring 2025, `CS_405All_InstructorsAll.html`) were never captured by the Internet Archive, the files are gone from cs.gmu.edu, and no copy turned up elsewhere, so it has to come from an upload.
+- CS 367's archived syllabi stop at Spring 2022, before the scrape's Fall 2022 cutoff, and the newer cs.gmu.edu files (Fall 2022 to Fall 2025) were never archived. Prof. Kevin Andrea still hosts the shared Fall 2024 syllabus for all sections at people.cs.gmu.edu/~kandrea/courses/F24/CS367_Syllabus_F24.html, which can be uploaded by hand. Running the scrape with an older `since` (e.g. "Fall 2019") would also add CS 367's 2019–2022 syllabi, along with older ones for every course.
 
 ### Free AI options
 
