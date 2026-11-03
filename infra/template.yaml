@@ -33,6 +33,32 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ''
+  AiProvider:
+    Type: String
+    Default: gemini
+    AllowedValues: [gemini, groq]
+    Description: Free-tier LLM for the AI check of uploads (api/src/lib/ai.js)
+  AiModel:
+    Type: String
+    Default: ''
+    Description: Empty uses the provider's default model
+  AiApiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Empty turns the AI check off
+  AiFallbackProvider:
+    Type: String
+    Default: ''
+    AllowedValues: ['', gemini, groq]
+    Description: Tried when the first provider fails or runs out of free quota
+  AiFallbackModel:
+    Type: String
+    Default: ''
+  AiFallbackApiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
   OriginSecret:
     Type: String
     NoEcho: true
@@ -96,6 +122,12 @@ Resources:
           ADMIN_EMAILS: !Ref AdminEmails
           AZURE_DI_ENDPOINT: !Ref AzureDiEndpoint
           AZURE_DI_KEY: !Ref AzureDiKey
+          AI_PROVIDER: !Ref AiProvider
+          AI_MODEL: !Ref AiModel
+          AI_API_KEY: !Ref AiApiKey
+          AI_FALLBACK_PROVIDER: !Ref AiFallbackProvider
+          AI_FALLBACK_MODEL: !Ref AiFallbackModel
+          AI_FALLBACK_API_KEY: !Ref AiFallbackApiKey
           ORIGIN_SECRET: !Ref OriginSecret
           IP_HASH_SALT: !Ref IpHashSalt
       Policies:

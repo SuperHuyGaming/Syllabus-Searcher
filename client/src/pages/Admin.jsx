@@ -25,6 +25,7 @@ import { supabase } from '../supabase';
 import { groupByTerm, recentTerms, termLabel } from '../lib/terms';
 import { displayCourse } from '../lib/courses';
 import { fileCheckMessage } from '../lib/filecheck';
+import { aiCheckMessage } from '../lib/aicheck';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
 import ErrorBoundary from '../components/ErrorBoundary';
 
@@ -238,6 +239,11 @@ function UploadCard({ upload, token }) {
   };
   const approve = useMutation({ mutationFn: () => api.approve(upload.id, form, token), onSuccess: done });
   const reject = useMutation({ mutationFn: () => api.reject(upload.id, note, token), onSuccess: done });
+  // Checks the details as typed on the card, so a fix can be confirmed before approving.
+  const aiCheck = useMutation({
+    mutationFn: () => api.aiCheck(upload.id, form, token),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pending'] }),
+  });
   const failure = approve.error || reject.error;
 
   // The file needs the admin token, so fetch it rather than linking to it. Both kinds
@@ -310,6 +316,8 @@ function UploadCard({ upload, token }) {
           </Stack>
         )}
 
+        <AiCheck ai={detected?.ai} running={aiCheck.isPending} error={aiCheck.error} onRun={() => aiCheck.mutate()} />
+
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           View the file and fix anything that doesn&apos;t match before approving.
         </Typography>
@@ -368,6 +376,67 @@ function UploadCard({ upload, token }) {
         </DialogActions>
       </Dialog>
     </Card>
+  );
+}
+
+const MATCH_CHIP = { yes: { color: 'success', mark: '✓' }, no: { color: 'error', mark: '✗' }, unclear: { color: 'default', mark: '?' } };
+
+// The AI's verdict on an upload (api/src/lib/ai.js). It only advises: the admin decides.
+function AiCheck({ ai, running, error, onRun }) {
+  const message = aiCheckMessage(ai);
+  const button = (
+    <Button size="small" color="inherit" onClick={onRun} loading={running}>
+      {message ? 'Run again' : 'Run AI check'}
+    </Button>
+  );
+  return (
+    <>
+      {message ? (
+        <Alert severity={message.severity} sx={{ mt: 1 }} action={button}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {message.title}
+          </Typography>
+          <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
+            {message.reasons.map((reason) => (
+              <li key={reason}>
+                <Typography variant="body2">{reason}</Typography>
+              </li>
+            ))}
+          </ul>
+          {message.matches.length > 0 && (
+            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.5, my: 0.5 }}>
+              {message.matches.map(({ field, value }) => (
+                <Chip
+                  key={field}
+                  size="small"
+                  variant="outlined"
+                  color={MATCH_CHIP[value].color}
+                  label={`${field} ${MATCH_CHIP[value].mark}`}
+                  title={value === 'unclear' ? 'The file does not say' : value === 'yes' ? 'Matches' : 'Does not match'}
+                />
+              ))}
+            </Stack>
+          )}
+          {message.footer && (
+            <Typography variant="caption" color="text.secondary">
+              {message.footer}
+            </Typography>
+          )}
+        </Alert>
+      ) : (
+        <Stack direction="row" sx={{ mt: 1, alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            No AI check yet.
+          </Typography>
+          {button}
+        </Stack>
+      )}
+      {error && (
+        <Alert severity="error" sx={{ mt: 1 }}>
+          {error.message}
+        </Alert>
+      )}
+    </>
   );
 }
 

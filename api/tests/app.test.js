@@ -18,6 +18,8 @@ const OFFERING = {
   sourceUrl: 'https://cs.gmu.edu/media/syllabi/Fall2024/CS_580ZhuZ001.pdf',
 };
 
+const AI = { verdict: 'legit', reasons: ['A CS 310 syllabus.'] };
+
 function event(method, path, { query, body, headers } = {}) {
   return {
     rawPath: path,
@@ -71,15 +73,19 @@ function fakes() {
       listPending: jest.fn().mockResolvedValue([pending]),
       get: jest.fn().mockResolvedValue(pending),
       review: jest.fn(async (id, { status }) => ({ ...pending, status })),
+      saveDetected: jest.fn(async (id, detected) => ({ ...pending, detected })),
       adminEmail: jest.fn(async (token) => (token === 'good' ? 'admin@gmu.edu' : null)),
       ping: jest.fn().mockResolvedValue(),
     },
     analyze: jest.fn().mockResolvedValue({ courseCodes: ['CS310'] }),
+    readText: jest.fn().mockResolvedValue('CS 310 syllabus text'),
+    checkUpload: jest.fn().mockResolvedValue(AI),
     search: { search: jest.fn(), refresh: jest.fn().mockResolvedValue() },
   };
 }
 
 const parse = (res) => JSON.parse(res.body);
+
 
 describe('catalog routes', () => {
   test('lists CS courses sorted by code', async () => {
@@ -169,9 +175,40 @@ describe('uploads', () => {
       expect.objectContaining({
         course_code: 'CS310',
         term_key: '2024-3',
-        detected: { courseCodes: ['CS310'], fileCheck: { status: 'clean', pages: 1, removed: [] } },
+        detected: { courseCodes: ['CS310'], fileCheck: { status: 'clean', pages: 1, removed: [] }, ai: AI },
       })
     );
+    expect(deps.readText).toHaveBeenCalledWith(expect.any(Buffer), 'application/pdf');
+    expect(deps.checkUpload).toHaveBeenCalledWith(
+      'CS 310 syllabus text',
+      { course: 'CS 310', title: 'Data Structures', term: 'Fall 2024', section: '001', instructor: 'Ada Lovelace' },
+      { duplicates: [] }
+    );
+  });
+
+  test('tells the AI check about a syllabus already on the site', async () => {
+    const deps = fakes();
+    deps.catalog.getCourse.mockResolvedValue({
+      title: 'Data Structures',
+      offerings: [
+        { termKey: '2024-3', section: '001', instructors: ['Lovelace, Ada'] },
+        { termKey: '2024-3', section: '002', instructors: ['Babbage, C'] },
+        { termKey: '2023-3', section: '001', instructors: ['Lovelace, Ada'] },
+      ],
+    });
+    await createApp(deps)(event('POST', '/api/uploads', { query, body: realPdf }));
+    expect(deps.checkUpload.mock.calls[0][2]).toEqual({ duplicates: [{ section: '001', instructors: ['Lovelace, Ada'] }] });
+  });
+
+  test('a failing AI check never fails the upload', async () => {
+    const deps = fakes();
+    deps.readText.mockRejectedValue(new Error('bad font'));
+    deps.checkUpload.mockRejectedValue(new Error('boom'));
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: realPdf }));
+    console.error.mockRestore();
+    expect(res.statusCode).toBe(201);
+    expect(deps.uploads.create.mock.calls[0][0].detected.ai.unavailable).toBe('The AI check failed.');
   });
 
   test('refuses a PDF that cannot be read and stores nothing', async () => {
@@ -199,7 +236,8 @@ describe('uploads', () => {
       expect.objectContaining({ contentType: 'text/html; charset=utf-8', filename: 'CS310_2024-3_001.html' })
     );
     expect(deps.analyze).not.toHaveBeenCalled();
-    expect(deps.uploads.create).toHaveBeenCalledWith(expect.objectContaining({ detected: { fileCheck: { status: 'html' } } }));
+    expect(deps.uploads.create).toHaveBeenCalledWith(expect.objectContaining({ detected: { fileCheck: { status: 'html' }, ai: AI } }));
+    expect(deps.readText).toHaveBeenCalledWith(expect.any(Buffer), 'text/html; charset=utf-8');
   });
 
   test('rejects bad course details', async () => {
@@ -224,6 +262,26 @@ describe('admin', () => {
     expect((await app(event('GET', '/api/admin/uploads'))).statusCode).toBe(401);
     expect((await app(event('GET', '/api/admin/uploads', { headers: auth('bad') }))).statusCode).toBe(403);
     expect((await app(event('GET', '/api/admin/uploads', { headers: auth('good') }))).statusCode).toBe(200);
+  });
+
+  test('runs the AI check again with the details on the card and saves it', async () => {
+    const deps = fakes();
+    const body = JSON.stringify({ course: 'CS 483', term: 'Spring 2024', section: '002', instructor: 'Ada Lovelace' });
+    const res = await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/ai-check`, { headers: auth('good'), body }));
+    expect(res.statusCode).toBe(200);
+    expect(deps.files.read).toHaveBeenCalledWith('pending', FILE_ID);
+    expect(deps.checkUpload.mock.calls[0][1]).toMatchObject({ course: 'CS 483', term: 'Spring 2024', section: '002' });
+    expect(deps.uploads.saveDetected).toHaveBeenCalledWith(UPLOAD_ID, { ai: AI });
+    expect(parse(res).detected.ai).toEqual(AI);
+  });
+
+  test('the AI check route is for admins and pending uploads only', async () => {
+    const deps = fakes();
+    const app = createApp(deps);
+    expect((await app(event('POST', `/api/admin/uploads/${UPLOAD_ID}/ai-check`))).statusCode).toBe(401);
+    deps.uploads.get.mockResolvedValue({ id: UPLOAD_ID, status: 'approved' });
+    expect((await app(event('POST', `/api/admin/uploads/${UPLOAD_ID}/ai-check`, { headers: auth('good') }))).statusCode).toBe(409);
+    expect(deps.checkUpload).not.toHaveBeenCalled();
   });
 
   test('approving publishes the file and the offering', async () => {
