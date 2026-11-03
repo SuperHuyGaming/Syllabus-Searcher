@@ -33,11 +33,13 @@ A file can start with `%PDF-` and still carry JavaScript, auto-run actions or em
 
 At upload time (or when the admin opens the card), send the extracted text to an LLM and show its verdict on the review card:
 
-- [ ] Is this actually a course syllabus? (vs. homework, a random PDF, spam, offensive content)
-- [ ] Does it match what the student entered: course code, term, section, instructor? Flag mismatches.
-- [ ] Is it a duplicate of a syllabus we already have for that course/term/section?
-- [ ] Any personal data that shouldn't be public (student names, grades, phone numbers)?
-- [ ] Verdict: likely legit / needs a closer look / likely junk, with one-line reasons. The admin still decides; nothing is auto-approved.
+- [x] Is this actually a course syllabus? (vs. homework, a random PDF, spam, offensive content)
+- [x] Does it match what the student entered: course code, term, section, instructor? Flag mismatches.
+- [x] Is it a duplicate of a syllabus we already have for that course/term/section? (Checked in code against the catalog, not by the model.)
+- [x] Any personal data that shouldn't be public (student names, grades, phone numbers)?
+- [x] Verdict: likely legit / needs a closer look / likely junk, with one-line reasons. The admin still decides; nothing is auto-approved.
+
+Built in `api/src/lib/ai.js` (providers, redaction, JSON check), `api/src/lib/text.js` (text from PDF with unpdf, or HTML) and `api/src/lib/review.js`. The check runs at upload time next to Azure and is stored in `uploads.detected.ai`. A mismatch, personal data or a duplicate always turns "likely legit" into "needs a closer look". The card's "Run again" button (`POST /api/admin/uploads/:id/ai-check`) checks the details as corrected on the card, and works for uploads made before the check.
 
 Use free AI tiers only (see "Free AI options" below). Only send uploads that pass the file checks, truncate text to ~20k characters, and if the free quota runs out, show "AI check unavailable" and let the admin review by hand.
 
@@ -60,8 +62,19 @@ Found in testing: a CS 584 syllabus was uploaded as CS 580, approved, and landed
 - [x] Instructor names: the upload form suggests professors already listed for the course.
 - [x] Admin "Published syllabi" tab: move, edit or delete any syllabus, scraped or uploaded. Fixes to scraped files are recorded (`PK=CURATED`) so the weekly scrape doesn't undo them.
 - [x] Full professor names: the scraper reads "Zhu, Ziwei" out of the syllabus text when the listing only says "Zhu, Z" or "Gonzalez".
-- [ ] The AI check (item 3) also compares the course code in the PDF with the one entered.
+- [x] The AI check (item 3) also compares the course code in the PDF with the one entered.
 - [ ] Merge two spellings of one professor in one step from the admin page (today: edit each syllabus). Known case: "Gonzalez Hernandez, A" and "González, Ana". Until then, Actions → "Rename professor" does it per environment (`api/scripts/rename-professor.js`, dry run first).
+
+### 6. Show when the data was last updated
+
+The cs.gmu.edu/syllabi/ page has returned 404 since late 2025 and the newest Internet Archive capture is from September 2025, so the weekly scrape re-reads the same captures. New syllabi now come only from uploads, and students can't tell how fresh the site is.
+
+- [ ] Record a "last updated" time per environment: the end of the last successful scrape and the time of the last approved upload, whichever is newer. Store it in DynamoDB (one small item) so no schema change is needed.
+- [ ] Return it from the API (`GET /api/status` or on an existing response) and show "Last updated Nov 1, 2026" in the footer or on the home page.
+- [ ] Optional: say on the home page that new terms come from uploads, with a link to the Upload page.
+- [ ] Optional: a "Refresh now" button on the admin page that starts the Scrape syllabi workflow through the GitHub API (`workflow_dispatch`, fine-grained token with Actions write on this repo only, kept in the environment secrets). Low value while the source page is offline; today the same thing is Actions → Scrape syllabi → Run workflow.
+
+Known gap: CS 405 has no syllabus. Its only listing (Spring 2025, `CS_405All_InstructorsAll.html`) was never captured by the Internet Archive, so it has to come from an upload.
 
 ### Free AI options
 

@@ -1,13 +1,16 @@
 const { json, binary, header, bodyJson, HttpError } = require('../lib/http');
 const { parseTerm, displayCourse, normalizeCourse } = require('../lib/terms');
 const { parseDetails, parseCourse, parseTermInput, parseSection, parseInstructors } = require('../lib/details');
+const { checkUpload: aiCheck } = require('../lib/ai');
+const { fileText } = require('../lib/text');
+const { aiReview } = require('../lib/review');
 
 const UUID = '([0-9a-f-]{36})';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 // Uploaded HTML is untrusted: if it's ever opened directly, its scripts can't run.
 const HTML_SANDBOX = { 'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:" };
 
-module.exports = ({ catalog, files, uploads, search }) => {
+module.exports = ({ catalog, files, uploads, search, checkUpload = aiCheck, readText = fileText }) => {
   async function requireAdmin(event) {
     const token = (header(event, 'authorization') || '').replace(/^Bearer\s+/i, '');
     if (!token) throw new HttpError(401, 'Sign in first');
@@ -73,6 +76,28 @@ module.exports = ({ catalog, files, uploads, search }) => {
           'Content-Disposition': `inline; filename="${(file.filename || 'upload').replace(/"/g, '')}"`,
           'X-Content-Type-Options': 'nosniff',
         });
+      },
+    },
+    {
+      // Runs the AI check again, e.g. after the free quota ran out at upload time.
+      // It checks the details as currently typed on the card, if any are sent.
+      method: 'POST',
+      path: new RegExp(`^/api/admin/uploads/${UUID}/ai-check$`),
+      async handler({ event, params }) {
+        await requireAdmin(event);
+        const upload = await pendingUpload(params[0]);
+        const body = bodyJson(event);
+        const details = parseDetails({
+          course: body.course ?? upload.course_code,
+          term: body.term ?? upload.term_key,
+          section: body.section ?? upload.section,
+          instructor: body.instructor ?? upload.instructor,
+        });
+        const file = await files.read('pending', upload.file_id);
+        if (!file) throw new HttpError(404, 'The uploaded file is missing');
+        const ai = await aiReview({ catalog, buffer: file.buffer, contentType: file.contentType, details, readText, checkUpload });
+        const saved = await uploads.saveDetected(upload.id, { ...upload.detected, ai });
+        return json(200, saved || { ...upload, detected: { ...upload.detected, ai } }, NO_STORE);
       },
     },
     {

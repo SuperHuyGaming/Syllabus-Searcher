@@ -112,6 +112,8 @@ jobs:
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           AZURE_DI_ENDPOINT: ${{ secrets.AZURE_DI_ENDPOINT }}
           AZURE_DI_KEY: ${{ secrets.AZURE_DI_KEY }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_FALLBACK_API_KEY: ${{ secrets.AI_FALLBACK_API_KEY }}
           ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
           IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
         run: |
@@ -126,6 +128,12 @@ jobs:
           add AdminEmails "$ADMIN_EMAILS"
           add AzureDiEndpoint "$AZURE_DI_ENDPOINT"
           add AzureDiKey "$AZURE_DI_KEY"
+          add AiProvider "${{ vars.AI_PROVIDER }}"
+          add AiModel "${{ vars.AI_MODEL }}"
+          add AiApiKey "$AI_API_KEY"
+          add AiFallbackProvider "${{ vars.AI_FALLBACK_PROVIDER }}"
+          add AiFallbackModel "${{ vars.AI_FALLBACK_MODEL }}"
+          add AiFallbackApiKey "$AI_FALLBACK_API_KEY"
           add OriginSecret "$ORIGIN_SECRET"
           add IpHashSalt "$IP_HASH_SALT"
           add ReservedConcurrency "${{ vars.RESERVED_CONCURRENCY || 0 }}"

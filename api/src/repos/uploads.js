@@ -39,6 +39,13 @@ function createUploads({ supabase } = {}) {
       return unwrap(await sb().from('uploads').select('*').eq('id', id).maybeSingle());
     },
 
+    // Replaces what the checks found (file check, Azure, AI) on a pending upload.
+    async saveDetected(id, detected) {
+      return unwrap(
+        await sb().from('uploads').update({ detected }).eq('id', id).eq('status', 'pending').select().maybeSingle()
+      );
+    },
+
     // `changes` holds any course details the admin corrected before approving.
     async review(id, { status, reviewer, note, changes = {} }) {
       return unwrap(

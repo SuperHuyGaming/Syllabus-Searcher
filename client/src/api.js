@@ -35,6 +35,7 @@ export const api = {
   // `details` may correct course, term, section and instructor before publishing.
   approve: (id, details, token) => post(`/admin/uploads/${id}/approve`, details, token),
   reject: (id, note, token) => post(`/admin/uploads/${id}/reject`, { note }, token),
+  aiCheck: (id, details, token) => post(`/admin/uploads/${id}/ai-check`, details, token),
   adminCourse: (code, token) => json(`/admin/courses/${encodeURIComponent(code)}`, { token }),
   updateOffering: (changes, token) => post('/admin/offerings/update', changes, token),
   deleteOffering: ({ code, id }, token) => post('/admin/offerings/delete', { code, id }, token),

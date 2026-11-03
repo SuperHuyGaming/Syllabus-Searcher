@@ -4,6 +4,9 @@ const { json, HttpError, bodyBuffer, clientIp } = require('../lib/http');
 const { analyzeSyllabus } = require('../lib/azure');
 const { parseDetails } = require('../lib/details');
 const { sanitizePdf, PdfRejected } = require('../lib/pdfcheck');
+const { checkUpload: aiCheck } = require('../lib/ai');
+const { fileText } = require('../lib/text');
+const { aiReview } = require('../lib/review');
 
 // What kind of file the body is, by its first bytes: a PDF, or an HTML page
 // (some professors post their syllabus as a web page). Anything else is refused.
@@ -14,7 +17,7 @@ function fileKind(buffer) {
   return html ? { type: 'text/html; charset=utf-8', ext: 'html' } : null;
 }
 
-module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus }) => [
+module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus, checkUpload = aiCheck, readText = fileText }) => [
   {
     // The PDF is the raw request body; course details ride in the query string.
     method: 'POST',
@@ -51,8 +54,15 @@ module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus }) => [
         metadata: { course: details.code, termKey: details.term.key, section: details.section },
       });
 
-      // Azure reads PDFs only; an HTML page is reviewed by eye.
-      const found = kind.ext === 'pdf' ? await analyze(stored) : null;
+      // Azure reads PDFs only; the AI check reads both. They run side by side, and
+      // neither can fail the upload: the admin reviews by hand without them.
+      const [found, ai] = await Promise.all([
+        kind.ext === 'pdf' ? analyze(stored) : null,
+        aiReview({ catalog, buffer: stored, contentType: kind.type, details, readText, checkUpload }).catch((err) => {
+          console.error('AI check failed', err);
+          return { unavailable: 'The AI check failed.', checkedAt: new Date().toISOString() };
+        }),
+      ]);
       const row = await uploads.create({
         course_code: details.code,
         term_key: details.term.key,
@@ -61,7 +71,7 @@ module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus }) => [
         file_id: fileId,
         file_size: stored.length,
         uploader_ip_hash: ipHash,
-        detected: { ...found, fileCheck },
+        detected: { ...found, fileCheck, ai },
       });
 
       return json(201, { id: row.id, status: row.status });

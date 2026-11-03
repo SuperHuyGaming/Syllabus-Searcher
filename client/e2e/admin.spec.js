@@ -43,7 +43,7 @@ async function signIn(page) {
   await page.route('https://e2e.supabase.co/**', (route) => route.fulfill({ status: 200, body: '{}' }));
 }
 
-async function mockAdminApi(page, onFile, { html = false } = {}) {
+async function mockAdminApi(page, onFile, { html = false, ai, onAiCheck } = {}) {
   await page.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/admin/uploads') {
@@ -55,9 +55,13 @@ async function mockAdminApi(page, onFile, { html = false } = {}) {
         instructor: 'Russell, K',
         file_size: 2048,
         created_at: '2026-11-01T18:00:00Z',
-        detected: { fileCheck: html ? { status: 'html' } : { status: 'stripped', pages: 2, removed: ['JavaScript'] } },
+        detected: { fileCheck: html ? { status: 'html' } : { status: 'stripped', pages: 2, removed: ['JavaScript'] }, ai: ai?.() },
       };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ uploads: [upload] }) });
+    }
+    if (path === `/api/admin/uploads/${UPLOAD_ID}/ai-check` && onAiCheck) {
+      onAiCheck(route.request().postDataJSON());
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     }
     if (path === `/api/admin/uploads/${UPLOAD_ID}/file`) {
       onFile?.(route.request());
@@ -160,4 +164,45 @@ test('HTML uploads have no new-tab button, since they would run on this site', a
   await page.goto('/admin');
   await expect(page.getByRole('button', { name: 'View file' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open in new tab' })).toHaveCount(0);
+});
+
+test('the AI verdict shows on the card and can be run again with corrected details', async ({ page }) => {
+  let ai = {
+    verdict: 'review',
+    documentType: 'course syllabus',
+    reasons: ["Doesn't match the entered section."],
+    matches: { course: 'yes', term: 'yes', section: 'no', instructor: 'unclear' },
+    provider: 'Gemini',
+    model: 'gemini-3.5-flash-lite',
+    checkedAt: '2026-11-02T15:00:00Z',
+  };
+  let sent;
+  await signIn(page);
+  await mockAdminApi(page, null, {
+    ai: () => ai,
+    onAiCheck: (body) => {
+      sent = body;
+      ai = { ...ai, verdict: 'legit', reasons: ['A CS 310 syllabus for section 002.'], matches: { ...ai.matches, section: 'yes' } };
+    },
+  });
+
+  await page.goto('/admin');
+  await expect(page.getByText('AI check: needs a closer look')).toBeVisible();
+  await expect(page.getByText("Doesn't match the entered section.")).toBeVisible();
+  await expect(page.getByText('section ✗')).toBeVisible();
+  await expect(page.getByText(/Gemini gemini-3.5-flash-lite/)).toBeVisible();
+
+  await page.getByLabel('Section').fill('002');
+  await page.getByRole('button', { name: 'Run again' }).click();
+  await expect(page.getByText('AI check: likely a real syllabus')).toBeVisible();
+  await expect(page.getByText('section ✓')).toBeVisible();
+  expect(sent).toMatchObject({ course: 'CS 310', section: '002' });
+});
+
+test('an upload without an AI check offers to run one', async ({ page }) => {
+  await signIn(page);
+  await mockAdminApi(page);
+  await page.goto('/admin');
+  await expect(page.getByText('No AI check yet.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run AI check' })).toBeVisible();
 });

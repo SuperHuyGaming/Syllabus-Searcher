@@ -77,6 +77,10 @@ Then in each environment → **Add environment secret** for each row. Values mar
 | `ORIGIN_SECRET` | any random 32+ characters (different per environment) |
 | `IP_HASH_SALT` | any random 16+ characters (different per environment) |
 | `AZURE_DI_ENDPOINT`, `AZURE_DI_KEY` | from step 4, or leave out |
+| `AI_API_KEY` | Gemini API key from aistudio.google.com/apikey (*same*), or leave out to turn the AI check off |
+| `AI_FALLBACK_API_KEY` | Groq API key from console.groq.com/keys (*same*), or leave out |
+
+Optional environment variables (not secrets): `AI_PROVIDER` (`gemini` or `groq`, default `gemini`), `AI_MODEL`, `AI_FALLBACK_PROVIDER` (set it to `groq` to use the fallback key), `AI_FALLBACK_MODEL`. Empty models use the defaults in `api/src/lib/ai.js`.
 
 To make random strings in PowerShell: `-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 40 | % {[char]$_})`
 
