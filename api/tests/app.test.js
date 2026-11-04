@@ -339,6 +339,29 @@ describe('admin', () => {
     );
   });
 
+  test('approving can list several professors separated by ";"', async () => {
+    const deps = fakes();
+    const body = JSON.stringify({ instructor: 'Andrea, Kevin; Kongmunvattana, Angkul ; Zhong, Yutao' });
+    const res = await createApp(deps)(
+      event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good'), body })
+    );
+    expect(res.statusCode).toBe(200);
+    expect(deps.catalog.putOffering).toHaveBeenCalledWith(
+      expect.objectContaining({ instructors: ['Andrea, Kevin', 'Kongmunvattana, Angkul', 'Zhong, Yutao'] })
+    );
+    expect(deps.uploads.review).toHaveBeenCalledWith(
+      UPLOAD_ID,
+      expect.objectContaining({
+        changes: expect.objectContaining({ instructor: 'Andrea, Kevin; Kongmunvattana, Angkul; Zhong, Yutao' }),
+      })
+    );
+
+    const bad = await createApp(fakes())(
+      event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good'), body: '{"instructor":"Andrea, Kevin; 1"}' })
+    );
+    expect(bad.statusCode).toBe(400);
+  });
+
   test('approving rejects invalid corrections before publishing', async () => {
     const deps = fakes();
     const res = await createApp(deps)(

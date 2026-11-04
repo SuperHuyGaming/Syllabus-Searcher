@@ -50,4 +50,11 @@ function parseDetails(input) {
   };
 }
 
-module.exports = { parseCourse, parseTermInput, parseSection, parseInstructor, parseInstructors, parseDetails };
+// The admin review form, like the edit form, takes several professors separated by ";".
+// `instructor` keeps them joined so it still fits the upload's single text column.
+function parseReviewDetails(input) {
+  const instructors = parseInstructors(input.instructor);
+  return { ...parseDetails({ ...input, instructor: instructors[0] }), instructor: instructors.join('; '), instructors };
+}
+
+module.exports = { parseCourse, parseTermInput, parseSection, parseInstructor, parseInstructors, parseDetails, parseReviewDetails };
