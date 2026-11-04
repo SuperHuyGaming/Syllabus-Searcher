@@ -1,6 +1,6 @@
 const { json, binary, header, bodyJson, HttpError } = require('../lib/http');
 const { parseTerm, displayCourse, normalizeCourse } = require('../lib/terms');
-const { parseDetails, parseCourse, parseTermInput, parseSection, parseInstructors } = require('../lib/details');
+const { parseReviewDetails, parseCourse, parseTermInput, parseSection, parseInstructors } = require('../lib/details');
 const { checkUpload: aiCheck } = require('../lib/ai');
 const { fileText } = require('../lib/text');
 const { aiReview } = require('../lib/review');
@@ -112,7 +112,7 @@ module.exports = ({
         await requireAdmin(event);
         const upload = await pendingUpload(params[0]);
         const body = bodyJson(event);
-        const details = parseDetails({
+        const details = parseReviewDetails({
           course: body.course ?? upload.course_code,
           term: body.term ?? upload.term_key,
           section: body.section ?? upload.section,
@@ -134,7 +134,7 @@ module.exports = ({
         const body = bodyJson(event);
 
         // The admin can correct what the student typed before publishing.
-        const details = parseDetails({
+        const details = parseReviewDetails({
           course: body.course ?? upload.course_code,
           term: body.term ?? upload.term_key,
           section: body.section ?? upload.section,
@@ -150,7 +150,7 @@ module.exports = ({
           title,
           term: details.term,
           section: details.section,
-          instructors: [details.instructor],
+          instructors: details.instructors,
           fileId: upload.file_id,
           contentType: moved.contentType,
           source: 'upload',

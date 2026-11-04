@@ -199,18 +199,14 @@ function DetailFields({ form, setForm, professorsField = 'instructor' }) {
         </TextField>
         <TextField size="small" label="Section" value={form.section} onChange={(e) => set('section')(e.target.value)} />
       </Stack>
-      {professorsField === 'instructor' ? (
-        <ProfessorField size="small" course={form.course} value={form.instructor} onChange={set('instructor')} />
-      ) : (
-        <ProfessorField
-          size="small"
-          label="Professors"
-          course={form.course}
-          value={form.instructors}
-          onChange={set('instructors')}
-          helperText='Separate several professors with ";" (e.g. "Zhu, Z; Yu, F")'
-        />
-      )}
+      <ProfessorField
+        size="small"
+        label="Professors"
+        course={form.course}
+        value={form[professorsField]}
+        onChange={set(professorsField)}
+        helperText='Separate several professors with ";" (e.g. "Zhu, Z; Yu, F")'
+      />
       {isNew && (
         <TextField
           size="small"
