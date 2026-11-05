@@ -27,6 +27,11 @@ module.exports = {
   aiFallbackModel: process.env.AI_FALLBACK_MODEL || '',
   aiFallbackApiKey: process.env.AI_FALLBACK_API_KEY || '',
 
+  // Virus scan with ClamAV (src/lib/virusscan.js). Set where a clamd daemon runs
+  // (Docker Compose); empty in Lambda, where scripts/virus-scan.js scans from Actions.
+  clamavHost: process.env.CLAMAV_HOST || '',
+  clamavPort: Number(process.env.CLAMAV_PORT || 3310),
+
   originSecret: process.env.ORIGIN_SECRET || '',
   ipHashSalt: process.env.IP_HASH_SALT || '',
   uploadsPerHour: Number(process.env.UPLOADS_PER_HOUR || 5),

@@ -1,0 +1,63 @@
+# Virus-scans pending uploads with ClamAV (api/scripts/virus-scan.js). Lambda has no
+# ClamAV, so uploads on the deployed sites arrive "not scanned" and wait for this job.
+# It only starts ClamAV when an upload needs a scan, so most runs take a few seconds.
+name: Virus scan
+
+on:
+  schedule:
+    - cron: '23 */2 * * *' # every two hours
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which site to scan
+        type: choice
+        options: [staging, production]
+        default: production
+      all:
+        description: Scan every pending upload again, not just unscanned ones
+        type: boolean
+        default: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production","staging"]') }}
+    environment: ${{ matrix.environment }}
+    env:
+      # Same database names the deploy workflow gives each environment.
+      MONGODB_URI: ${{ secrets.MONGODB_URI }}
+      MONGODB_DB: ${{ matrix.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CLAMAV_HOST: 127.0.0.1
+      ALL: ${{ inputs.all && '--all' || '' }}
+    steps:
+      - name: Check secrets
+        id: check
+        run: echo "ready=${{ env.MONGODB_URI != '' && env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        if: steps.check.outputs.ready == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Count uploads to scan
+        id: count
+        if: steps.check.outputs.ready == 'true'
+        working-directory: api
+        run: |
+          npm ci --omit=dev
+          echo "todo=$(node scripts/virus-scan.js --count $ALL)" >> "$GITHUB_OUTPUT"
+      - name: Start ClamAV
+        if: steps.count.outputs.todo > 0
+        run: docker run -d --name clamav -p 3310:3310 clamav/clamav:1.5.4
+      - name: Scan
+        if: steps.count.outputs.todo > 0
+        working-directory: api
+        shell: bash # pipefail, so a failed scan fails the job despite tee
+        run: node scripts/virus-scan.js $ALL | tee -a "$GITHUB_STEP_SUMMARY"
