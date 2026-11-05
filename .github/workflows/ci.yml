@@ -22,6 +22,25 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  # The virus-scan client against a real clamd, same image as docker-compose.yml.
+  clamav:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker run -d --name clamav -p 3310:3310 clamav/clamav:1.5.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - run: npx jest tests/virusscan.test.js
+        env:
+          CLAMAV_TEST_HOST: 127.0.0.1
+
   client:
     runs-on: ubuntu-latest
     defaults:

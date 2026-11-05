@@ -141,6 +141,9 @@ module.exports = ({
           instructor: body.instructor ?? upload.instructor,
         });
         const title = await courseTitle(details.code, body.title);
+        if (upload.detected?.virusScan?.status === 'infected') {
+          throw new HttpError(409, 'The virus scanner flagged this file. Reject it instead.');
+        }
 
         const moved = await files.move('pending', 'syllabi', upload.file_id);
         if (!moved) throw new HttpError(404, 'The uploaded file is missing');

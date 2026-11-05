@@ -5,6 +5,7 @@
 # Local containers stand in for the cloud data stores:
 #   dynamodb -> AWS DynamoDB (course catalog)
 #   mongodb  -> MongoDB Atlas (syllabus files in GridFS)
+#   clamav   -> virus scan of uploads (in AWS the "Virus scan" workflow does this)
 # Supabase (upload queue + admin login) and Azure stay on their free cloud tiers;
 # put their keys in .env. Searching works without them.
 x-data-env: &data-env
@@ -60,11 +61,23 @@ services:
     environment:
       <<: *data-env
       PORT: "3001"
+      CLAMAV_HOST: clamav
     depends_on:
       db-init:
         condition: service_completed_successfully
       mongodb:
         condition: service_healthy
+
+  # ClamAV daemon for the upload virus scan. It needs about 1.5 GB of memory and a
+  # minute or two after starting to load its signatures; uploads made before that
+  # are marked "scan failed" and can be scanned again with:
+  #   docker compose run --rm api node scripts/virus-scan.js
+  clamav:
+    image: clamav/clamav:1.5.4
+    container_name: syllabus-clamav
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
 
   client:
     build:
@@ -93,3 +106,4 @@ services:
 volumes:
   dynamodb_data:
   mongo_data:
+  clamav_data:

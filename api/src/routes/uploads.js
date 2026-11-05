@@ -7,6 +7,7 @@ const { sanitizePdf, PdfRejected } = require('../lib/pdfcheck');
 const { checkUpload: aiCheck } = require('../lib/ai');
 const { fileText } = require('../lib/text');
 const { aiReview } = require('../lib/review');
+const { scanUpload } = require('../lib/virusscan');
 
 // What kind of file the body is, by its first bytes: a PDF, or an HTML page
 // (some professors post their syllabus as a web page). Anything else is refused.
@@ -17,7 +18,7 @@ function fileKind(buffer) {
   return html ? { type: 'text/html; charset=utf-8', ext: 'html' } : null;
 }
 
-module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus, checkUpload = aiCheck, readText = fileText }) => [
+module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus, checkUpload = aiCheck, readText = fileText, virusScan = scanUpload }) => [
   {
     // The PDF is the raw request body; course details ride in the query string.
     method: 'POST',
@@ -34,6 +35,13 @@ module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus, checkUpl
       const ipHash = crypto.createHash('sha256').update(config.ipHashSalt + clientIp(event)).digest('hex');
       if (!(await catalog.hitRateLimit(ipHash, config.uploadsPerHour))) {
         throw new HttpError(429, 'Too many uploads. Try again in an hour.');
+      }
+
+      // The student's original bytes are scanned, before anything is rebuilt or stored.
+      const scan = await virusScan(file);
+      if (scan.status === 'infected') {
+        console.error('Upload refused by the virus scan', scan.signature);
+        throw new HttpError(422, 'The virus scanner flagged this file, so it was not uploaded.');
       }
 
       // A PDF is stored as a rebuilt copy with scripts and attachments removed.
@@ -71,7 +79,7 @@ module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus, checkUpl
         file_id: fileId,
         file_size: stored.length,
         uploader_ip_hash: ipHash,
-        detected: { ...found, fileCheck, ai },
+        detected: { ...found, fileCheck, virusScan: scan, ai },
       });
 
       return json(201, { id: row.id, status: row.status });

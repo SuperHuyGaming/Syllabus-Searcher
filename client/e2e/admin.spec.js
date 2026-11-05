@@ -43,7 +43,7 @@ async function signIn(page) {
   await page.route('https://e2e.supabase.co/**', (route) => route.fulfill({ status: 200, body: '{}' }));
 }
 
-async function mockAdminApi(page, onFile, { html = false, ai, onAiCheck } = {}) {
+async function mockAdminApi(page, onFile, { html = false, ai, onAiCheck, virusScan } = {}) {
   await page.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/admin/uploads') {
@@ -55,7 +55,11 @@ async function mockAdminApi(page, onFile, { html = false, ai, onAiCheck } = {}) 
         instructor: 'Russell, K',
         file_size: 2048,
         created_at: '2026-11-01T18:00:00Z',
-        detected: { fileCheck: html ? { status: 'html' } : { status: 'stripped', pages: 2, removed: ['JavaScript'] }, ai: ai?.() },
+        detected: {
+          fileCheck: html ? { status: 'html' } : { status: 'stripped', pages: 2, removed: ['JavaScript'] },
+          virusScan,
+          ai: ai?.(),
+        },
       };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ uploads: [upload] }) });
     }
@@ -205,6 +209,15 @@ test('an upload without an AI check offers to run one', async ({ page }) => {
   await page.goto('/admin');
   await expect(page.getByText('No AI check yet.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run AI check' })).toBeVisible();
+});
+
+test('an upload the virus scan flagged cannot be approved', async ({ page }) => {
+  await signIn(page);
+  await mockAdminApi(page, null, { virusScan: { status: 'infected', signature: 'Eicar-Test-Signature' } });
+  await page.goto('/admin');
+  await expect(page.getByText('Virus scan found Eicar-Test-Signature')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Reject' })).toBeEnabled();
 });
 
 test('admin edits and regenerates a syllabus summary', async ({ page }) => {

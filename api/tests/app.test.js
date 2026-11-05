@@ -91,6 +91,7 @@ function fakes() {
     analyze: jest.fn().mockResolvedValue({ courseCodes: ['CS310'] }),
     readText: jest.fn().mockResolvedValue('CS 310 syllabus text'),
     checkUpload: jest.fn().mockResolvedValue(AI),
+    virusScan: jest.fn().mockResolvedValue({ status: 'not-scanned' }),
     summarize: jest.fn().mockResolvedValue(SUMMARY_RESULT),
     search: { search: jest.fn(), refresh: jest.fn().mockResolvedValue() },
   };
@@ -205,7 +206,12 @@ describe('uploads', () => {
       expect.objectContaining({
         course_code: 'CS310',
         term_key: '2024-3',
-        detected: { courseCodes: ['CS310'], fileCheck: { status: 'clean', pages: 1, removed: [] }, ai: AI },
+        detected: {
+          courseCodes: ['CS310'],
+          fileCheck: { status: 'clean', pages: 1, removed: [] },
+          virusScan: { status: 'not-scanned' },
+          ai: AI,
+        },
       })
     );
     expect(deps.readText).toHaveBeenCalledWith(expect.any(Buffer), 'application/pdf');
@@ -241,6 +247,19 @@ describe('uploads', () => {
     expect(deps.uploads.create.mock.calls[0][0].detected.ai.unavailable).toBe('The AI check failed.');
   });
 
+  test('refuses a file the virus scanner flags and stores nothing', async () => {
+    const deps = fakes();
+    deps.virusScan.mockResolvedValue({ status: 'infected', signature: 'Eicar-Test-Signature' });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: realPdf }));
+    console.error.mockRestore();
+    expect(res.statusCode).toBe(422);
+    expect(JSON.parse(res.body).error).toMatch(/virus scanner/);
+    expect(deps.virusScan).toHaveBeenCalledWith(realPdf);
+    expect(deps.files.save).not.toHaveBeenCalled();
+    expect(deps.uploads.create).not.toHaveBeenCalled();
+  });
+
   test('refuses a PDF that cannot be read and stores nothing', async () => {
     const deps = fakes();
     const res = await createApp(deps)(event('POST', '/api/uploads', { query, body: PDF }));
@@ -266,7 +285,7 @@ describe('uploads', () => {
       expect.objectContaining({ contentType: 'text/html; charset=utf-8', filename: 'CS310_2024-3_001.html' })
     );
     expect(deps.analyze).not.toHaveBeenCalled();
-    expect(deps.uploads.create).toHaveBeenCalledWith(expect.objectContaining({ detected: { fileCheck: { status: 'html' }, ai: AI } }));
+    expect(deps.uploads.create).toHaveBeenCalledWith(expect.objectContaining({ detected: { fileCheck: { status: 'html' }, virusScan: { status: 'not-scanned' }, ai: AI } }));
     expect(deps.readText).toHaveBeenCalledWith(expect.any(Buffer), 'text/html; charset=utf-8');
   });
 
@@ -328,6 +347,17 @@ describe('admin', () => {
     expect(deps.summarize).toHaveBeenCalledWith('CS 310 syllabus text', { timeoutMs: 7000 });
     expect(deps.catalog.putSummary).toHaveBeenCalledWith(FILE_ID, SUMMARY_RESULT);
     expect(parse(res).summary).toBe('saved');
+  });
+
+  test('an upload the virus scan flagged cannot be approved', async () => {
+    const deps = fakes();
+    deps.uploads.get.mockResolvedValue({
+      ...(await deps.uploads.get()),
+      detected: { virusScan: { status: 'infected', signature: 'Eicar-Test-Signature' } },
+    });
+    const res = await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good') }));
+    expect(res.statusCode).toBe(409);
+    expect(deps.files.move).not.toHaveBeenCalled();
   });
 
   test('approving still works when the summary fails', async () => {
