@@ -22,6 +22,7 @@ export const api = {
   courses: () => json('/courses?dept=CS'),
   course: (code) => json(`/courses/${encodeURIComponent(code)}`),
   professors: () => json('/professors'),
+  status: () => json('/status'),
   search: (q) => json(`/search?${new URLSearchParams({ q })}`),
 
   upload: ({ course, term, section, instructor, file }) => {

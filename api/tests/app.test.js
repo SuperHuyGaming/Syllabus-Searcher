@@ -68,6 +68,8 @@ function fakes() {
       putSummary: jest.fn().mockResolvedValue(),
       deleteSummary: jest.fn().mockResolvedValue(),
       hitRateLimit: jest.fn().mockResolvedValue(true),
+      getStatus: jest.fn().mockResolvedValue({ scrapedAt: '2026-11-02T09:40:00.123456+00:00', uploadedAt: '2026-11-01T18:00:00.000Z' }),
+      markUploaded: jest.fn().mockResolvedValue(),
       ping: jest.fn().mockResolvedValue(),
     },
     files: {
@@ -98,6 +100,24 @@ const parse = (res) => JSON.parse(res.body);
 
 
 describe('catalog routes', () => {
+  test('status gives the newer of the last scrape and the last approved upload', async () => {
+    const deps = fakes();
+    const res = await createApp(deps)(event('GET', '/api/status'));
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['Cache-Control']).toContain('s-maxage=60');
+    expect(parse(res).lastUpdated).toBe('2026-11-02T09:40:00.123Z');
+
+    deps.catalog.getStatus.mockResolvedValue({ uploadedAt: '2026-11-03T10:00:00.000Z' });
+    expect(parse(await createApp(deps)(event('GET', '/api/status')))).toEqual({
+      lastUpdated: '2026-11-03T10:00:00.000Z',
+      scrapedAt: null,
+      uploadedAt: '2026-11-03T10:00:00.000Z',
+    });
+
+    deps.catalog.getStatus.mockResolvedValue({});
+    expect(parse(await createApp(deps)(event('GET', '/api/status'))).lastUpdated).toBeNull();
+  });
+
   test('lists CS courses sorted by code', async () => {
     const app = createApp(fakes());
     const res = await app(event('GET', '/api/courses'));
@@ -303,6 +323,7 @@ describe('admin', () => {
       expect.objectContaining({ code: 'CS310', title: 'Data Structures', term: expect.objectContaining({ key: '2024-3' }) })
     );
     expect(deps.uploads.review).toHaveBeenCalledWith(UPLOAD_ID, { status: 'approved', reviewer: 'admin@gmu.edu' });
+    expect(deps.catalog.markUploaded).toHaveBeenCalledTimes(1);
     expect(deps.files.read).toHaveBeenCalledWith('syllabi', FILE_ID);
     expect(deps.summarize).toHaveBeenCalledWith('CS 310 syllabus text', { timeoutMs: 7000 });
     expect(deps.catalog.putSummary).toHaveBeenCalledWith(FILE_ID, SUMMARY_RESULT);

@@ -121,6 +121,10 @@ export async function mockApi(page, { onUpload } = {}) {
     if (path === '/api/courses/CS105') return route.fulfill(json(cs105));
     if (path.startsWith('/api/courses/')) return route.fulfill(json({ error: 'No syllabi found for CS999' }, 404));
     if (path === '/api/professors') return route.fulfill(json({ professors }));
+    if (path === '/api/status') {
+      const lastUpdated = '2026-11-01T12:00:00.000Z';
+      return route.fulfill(json({ lastUpdated, scrapedAt: lastUpdated, uploadedAt: null }));
+    }
     if (path === '/api/search') {
       const q = url.searchParams.get('q');
       const results = /python/i.test(q)
