@@ -26,7 +26,7 @@ import { supabase } from '../supabase';
 import { groupByTerm, recentTerms, termLabel } from '../lib/terms';
 import { displayCourse } from '../lib/courses';
 import { likelySpellings } from '../lib/professors';
-import { fileCheckMessage } from '../lib/filecheck';
+import { fileCheckMessage, virusScanMessage } from '../lib/filecheck';
 import { aiCheckMessage } from '../lib/aicheck';
 import { POLICIES, formToSummary, hasSummary, summaryCredit, summaryToForm } from '../lib/summary';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
@@ -292,6 +292,8 @@ function UploadCard({ upload, token }) {
 
   const detected = upload.detected;
   const fileCheck = fileCheckMessage(detected?.fileCheck);
+  const virusScan = virusScanMessage(detected?.virusScan);
+  const infected = detected?.virusScan?.status === 'infected';
   return (
     <Card variant="outlined">
       <CardContent>
@@ -306,6 +308,11 @@ function UploadCard({ upload, token }) {
         {fileCheck && (
           <Alert severity={fileCheck.severity} sx={{ mt: 1 }}>
             {fileCheck.text}
+          </Alert>
+        )}
+        {virusScan && (
+          <Alert severity={virusScan.severity} sx={{ mt: 1 }}>
+            {virusScan.text}
           </Alert>
         )}
 
@@ -343,7 +350,7 @@ function UploadCard({ upload, token }) {
           View file
         </Button>
         {detected?.fileCheck?.status !== 'html' && <Button onClick={openInTab}>Open in new tab</Button>}
-        <Button variant="contained" onClick={() => approve.mutate()} loading={approve.isPending}>
+        <Button variant="contained" onClick={() => approve.mutate()} loading={approve.isPending} disabled={infected}>
           Approve
         </Button>
         <Button color="error" onClick={() => reject.mutate()} loading={reject.isPending}>

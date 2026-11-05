@@ -11,3 +11,21 @@ export function fileCheckMessage(check) {
   }
   return { severity: 'success', text: `File check: clean. Stored a rebuilt copy (${pages}).` };
 }
+
+// What the admin card says about the upload's virus scan (see api/src/lib/virusscan.js).
+// Returns { severity, text } for an MUI Alert, or null for uploads made before the scan.
+export function virusScanMessage(scan) {
+  if (!scan) return null;
+  const when = scan.scannedAt ? ` on ${new Date(scan.scannedAt).toLocaleDateString()}` : '';
+  if (scan.status === 'clean') return { severity: 'success', text: `Virus scan: clean (ClamAV${when}).` };
+  if (scan.status === 'infected') {
+    return { severity: 'error', text: `Virus scan found ${scan.signature}. Reject this upload; it can't be approved.` };
+  }
+  if (scan.status === 'error') {
+    return { severity: 'warning', text: `Virus scan failed (${scan.error}). The next scheduled scan tries again.` };
+  }
+  return {
+    severity: 'info',
+    text: 'Not virus-scanned yet. The scan runs every two hours, or now from Actions → Virus scan → Run workflow.',
+  };
+}

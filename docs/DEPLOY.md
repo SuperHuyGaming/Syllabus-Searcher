@@ -96,6 +96,7 @@ Do this for `staging` first, then `production`.
    This is what guarantees no overage charges. It can't be done from the template. If AWS won't put a second distribution on the Free plan, delete the staging stack when you're not using it (CloudFormation → `syllabus-searcher-staging` → Delete; empty its site bucket first) and redeploy it when needed.
 4. Actions → **Scrape syllabi** → Run workflow → pick the environment. This loads the course catalog and syllabi into its DynamoDB table and database.
    Then Actions → **Summarize syllabi** → Run workflow writes the course page summaries, up to 40 files per run (run it again until the summary says none are left). It also runs every Monday after the scrape.
+   Uploads are virus-scanned by the **Virus scan** workflow every two hours, with the `MONGODB_URI` and Supabase secrets the environment already has. Actions → **Virus scan** → Run workflow scans pending uploads right away.
 5. Settings → Environments → the environment → **Add environment variable** `SITE_URL` with the site URL.
    This turns on the keep-alive workflow for it, so its Supabase project and Atlas don't pause.
 6. In that environment's Supabase project, Authentication → URL Configuration, set the Site URL to the site URL and add `<site URL>/admin` as a redirect URL.
