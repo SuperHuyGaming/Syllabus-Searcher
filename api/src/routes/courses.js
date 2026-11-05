@@ -49,6 +49,17 @@ module.exports = ({ catalog, files, search }) => [
   },
   {
     method: 'GET',
+    path: /^\/api\/status$/,
+    // When the data last changed: the last full scrape or the last approved upload, whichever is newer.
+    async handler() {
+      const { scrapedAt = null, uploadedAt = null } = await catalog.getStatus();
+      const times = [scrapedAt, uploadedAt].filter((t) => t && !Number.isNaN(Date.parse(t)));
+      const lastUpdated = times.length ? new Date(Math.max(...times.map(Date.parse))).toISOString() : null;
+      return json(200, { lastUpdated, scrapedAt, uploadedAt }, CATALOG_CACHE);
+    },
+  },
+  {
+    method: 'GET',
     path: /^\/api\/professors$/,
     async handler() {
       const professors = groupByProfessor(await catalog.listOfferings());

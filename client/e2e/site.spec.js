@@ -151,3 +151,10 @@ test('no horizontal scrolling', async ({ page }) => {
     expect(overflow, `${path} scrolls sideways`).toBeLessThanOrEqual(0);
   }
 });
+
+test('the footer says when the data was last updated, and home links to uploads', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('contentinfo')).toContainText('Last updated Nov 1, 2026.');
+  await page.getByRole('link', { name: "Upload one that's missing" }).click();
+  await expect(page).toHaveURL(/\/upload$/);
+});

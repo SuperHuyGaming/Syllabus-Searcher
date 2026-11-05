@@ -203,6 +203,8 @@ def main(argv=None):
         log.info("Made %d syllabi searchable", store.index_text(reindex=args.reindex))
         log.info("Filled in full professor names on %d syllabi", store.resolve_names())
         log.info("Made PDF copies of %d HTML syllabi", store.make_pdfs())
+    if store and not args.index_only:
+        store.mark_scraped()
     return 0
 
 

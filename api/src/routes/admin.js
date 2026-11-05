@@ -155,6 +155,7 @@ module.exports = ({
           contentType: moved.contentType,
           source: 'upload',
         });
+        await catalog.markUploaded();
         const changes = {
           course_code: details.code,
           term_key: details.term.key,

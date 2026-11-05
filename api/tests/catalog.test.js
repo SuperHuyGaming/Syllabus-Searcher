@@ -59,3 +59,24 @@ describe('summaries in the catalog', () => {
     expect(course.offerings[1].summary).toBeNull();
   });
 });
+
+describe('last updated status', () => {
+  test('reads both times from one item, and an empty table gives neither', async () => {
+    const client = fakeClient((name, input) =>
+      input.Key.SK === 'UPDATED' ? { Item: { PK: 'STATUS', SK: 'UPDATED', scrapedAt: 'a', uploadedAt: 'b' } } : {}
+    );
+    const catalog = createCatalog({ client, tableName: 'T' });
+    expect(await catalog.getStatus()).toEqual({ scrapedAt: 'a', uploadedAt: 'b' });
+    const empty = createCatalog({ client: fakeClient(() => ({})), tableName: 'T' });
+    expect(await empty.getStatus()).toEqual({ scrapedAt: undefined, uploadedAt: undefined });
+  });
+
+  test('an approved upload only sets uploadedAt, so the scrape time is kept', async () => {
+    const client = fakeClient(() => ({}));
+    await createCatalog({ client, tableName: 'T' }).markUploaded();
+    const { input } = client.send.mock.calls[0][0];
+    expect(client.send.mock.calls[0][0].constructor.name).toBe('UpdateCommand');
+    expect(input.Key).toEqual({ PK: 'STATUS', SK: 'UPDATED' });
+    expect(input.UpdateExpression).toBe('SET uploadedAt = :now');
+  });
+});

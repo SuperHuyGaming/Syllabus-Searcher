@@ -107,6 +107,15 @@ class Store:
             }
         )
 
+    def mark_scraped(self):
+        """Records when a full scrape finished, for "Last updated" on the site.
+        Only scrapedAt is set; the API sets uploadedAt on the same item when an upload is approved."""
+        self.table.update_item(
+            Key={"PK": "STATUS", "SK": "UPDATED"},
+            UpdateExpression="SET scrapedAt = :now",
+            ExpressionAttributeValues={":now": datetime.now(timezone.utc).isoformat()},
+        )
+
     def save_catalog(self, dept, courses):
         """Adds every course from the official catalog, with or without a syllabus.
         The catalog's title, credits, description and prerequisites win over the listings'."""
