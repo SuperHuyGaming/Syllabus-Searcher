@@ -1,8 +1,15 @@
 import { Link as RouterLink, Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { AppBar, Box, Button, Container, Link, Toolbar, Typography } from '@mui/material';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import { api } from '../api';
+import { updatedLabel } from '../lib/status';
 
 export default function Layout() {
+  // Nothing is shown until it loads, or if it fails; the rest of the page doesn't wait for it.
+  const { data: status } = useQuery({ queryKey: ['status'], queryFn: api.status });
+  const updated = updatedLabel(status?.lastUpdated);
+
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" elevation={0}>
@@ -44,6 +51,7 @@ export default function Layout() {
       </Container>
 
       <Box component="footer" sx={{ py: 3, textAlign: 'center', color: 'text.secondary', fontSize: 14 }}>
+        {updated && <>Last updated {updated}. </>}
         Computer Science syllabi only for now. Not affiliated with George Mason University.{' '}
         <Link component={RouterLink} to="/admin" color="inherit">
           Admin

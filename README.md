@@ -49,6 +49,7 @@ Useful commands:
 docker compose ps                         # what's running
 docker compose logs -f api                # API logs
 curl localhost:8080/api/health            # checks DynamoDB, MongoDB, Supabase
+curl localhost:8080/api/status            # when the last full scrape and the last approved upload ran
 docker compose run --rm scraper --dry-run # list what would be scraped, write nothing
 docker compose run --rm scraper --catalog-only # refresh the course list from catalog.gmu.edu
 docker compose down                       # stop (data is kept in volumes)

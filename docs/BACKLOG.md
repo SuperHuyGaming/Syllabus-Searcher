@@ -67,14 +67,16 @@ Found in testing: a CS 584 syllabus was uploaded as CS 580, approved, and landed
 - [x] The AI check (item 3) also compares the course code in the PDF with the one entered.
 - [x] Merge two spellings of one professor in one step from the admin page: `/admin` → Professors lists every stored spelling, suggests likely duplicates ("Gonzalez Hernandez, A → González, Ana"), previews the change and then rewrites every syllabus at once (`POST /api/admin/professors/merge`, same code as `api/scripts/rename-professor.js`). Actions → "Rename professor" still works for scripted renames.
 
-### 6. Show when the data was last updated
+### 6. Show when the data was last updated (done)
 
 The cs.gmu.edu/syllabi/ page has returned 404 since late 2025 and the newest Internet Archive capture is from September 2025, so the weekly scrape re-reads the same captures. New syllabi now come only from uploads, and students can't tell how fresh the site is.
 
-- [ ] Record a "last updated" time per environment: the end of the last successful scrape and the time of the last approved upload, whichever is newer. Store it in DynamoDB (one small item) so no schema change is needed.
-- [ ] Return it from the API (`GET /api/status` or on an existing response) and show "Last updated Nov 1, 2026" in the footer or on the home page.
-- [ ] Optional: say on the home page that new terms come from uploads, with a link to the Upload page.
-- [ ] Optional: a "Refresh now" button on the admin page that starts the Scrape syllabi workflow through the GitHub API (`workflow_dispatch`, fine-grained token with Actions write on this repo only, kept in the environment secrets). Low value while the source page is offline; today the same thing is Actions → Scrape syllabi → Run workflow.
+- [x] Record a "last updated" time per environment: the end of the last successful scrape and the time of the last approved upload, whichever is newer. Store it in DynamoDB (one small item) so no schema change is needed.
+- [x] Return it from the API (`GET /api/status` or on an existing response) and show "Last updated Nov 1, 2026" in the footer or on the home page.
+- [x] Optional: say on the home page that new terms come from uploads, with a link to the Upload page.
+- [ ] Optional: a "Refresh now" button on the admin page that starts the Scrape syllabi workflow through the GitHub API (`workflow_dispatch`, fine-grained token with Actions write on this repo only, kept in the environment secrets). Low value while the source page is offline; today the same thing is Actions → Scrape syllabi → Run workflow. Not built.
+
+Built as one item, `PK=STATUS, SK=UPDATED`: the scraper sets `scrapedAt` at the end of a full run (`--index-only` and `--catalog-only` don't count) and approving an upload sets `uploadedAt`. `GET /api/status` returns both and `lastUpdated`, the newer one; the footer shows it as "Last updated Nov 1, 2026" and hides it until the first time is recorded.
 
 Known gaps (checked 2026-11-02):
 

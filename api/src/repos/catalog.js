@@ -9,6 +9,8 @@
 //   PK=SUMMARY        SK=<fileId>                         -> AI summary of one syllabus file. Kept apart
 //                                                            from the offering, which the weekly scrape
 //                                                            rewrites; a cross-listed file shares one
+//   PK=STATUS         SK=UPDATED                          -> scrapedAt (end of the last full scrape, set by
+//                                                            the scraper) and uploadedAt (last approved upload)
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient,
@@ -289,6 +291,24 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
 
     async deleteSummary(fileId) {
       await db.send(new DeleteCommand({ TableName: tableName, Key: { PK: 'SUMMARY', SK: fileId } }));
+    },
+
+    // When the data last changed, as { scrapedAt, uploadedAt } (either may be missing).
+    async getStatus() {
+      const { Item } = await db.send(new GetCommand({ TableName: tableName, Key: { PK: 'STATUS', SK: 'UPDATED' } }));
+      return { scrapedAt: Item?.scrapedAt, uploadedAt: Item?.uploadedAt };
+    },
+
+    // Records that an upload was just approved. The scraper sets scrapedAt on the same item.
+    async markUploaded() {
+      await db.send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: { PK: 'STATUS', SK: 'UPDATED' },
+          UpdateExpression: 'SET uploadedAt = :now',
+          ExpressionAttributeValues: { ':now': new Date().toISOString() },
+        })
+      );
     },
 
     // Returns false once the caller has used up its uploads for this hour.

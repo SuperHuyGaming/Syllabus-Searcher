@@ -35,6 +35,12 @@ export default function Home() {
         <Typography color="text.secondary" sx={{ mt: 1 }}>
           Search a GMU CS course to see who taught it each term and read their syllabus.
         </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          GMU&apos;s syllabus page has been offline since 2025, so newer terms come from students.{' '}
+          <Link component={RouterLink} to="/upload">
+            Upload one that&apos;s missing
+          </Link>
+        </Typography>
       </Box>
 
       <Autocomplete
