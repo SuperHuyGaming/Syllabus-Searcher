@@ -52,6 +52,27 @@ test('a syllabus summary opens under its card', async ({ page }) => {
   await expect(summary).toHaveCount(0);
 });
 
+test('the course rollup shows an overview and opens for details', async ({ page }) => {
+  await page.goto('/courses/CS310');
+  const rollup = page.getByTestId('course-rollup');
+  await expect(rollup).toContainText('Across all syllabi for CS 310');
+  await expect(rollup).toContainText('usually covers lists, trees and hashing');
+  await expect(page.getByTestId('course-rollup-details')).toHaveCount(0);
+
+  await rollup.getByRole('button', { name: 'Topics, grading and differences' }).click();
+  const details = page.getByTestId('course-rollup-details');
+  await expect(details.getByText('Hash tables')).toBeVisible();
+  await expect(details.getByRole('cell', { name: '30-40%' })).toBeVisible();
+  await expect(details).toContainText('Masri, W gives weekly quizzes');
+  await expect(details).toContainText('AI summary of 2 syllabi by Gemini, Nov 9, 2026');
+});
+
+test('a course without a rollup shows no rollup card', async ({ page }) => {
+  await page.goto('/courses/CS105');
+  await expect(page.getByText('No syllabi for CS 105 yet.')).toBeVisible();
+  await expect(page.getByTestId('course-rollup')).toHaveCount(0);
+});
+
 test('filter a course by professor', async ({ page }) => {
   await page.goto('/courses/CS310');
   await page.getByLabel('Professor').click();

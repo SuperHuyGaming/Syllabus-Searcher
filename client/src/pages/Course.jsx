@@ -25,7 +25,7 @@ import SummarizeIcon from '@mui/icons-material/Summarize';
 import { api } from '../api';
 import SyllabusButtons from '../components/SyllabusButtons';
 import SyllabusSummary from '../components/SyllabusSummary';
-import { hasSummary } from '../lib/summary';
+import { hasRollup, hasSummary } from '../lib/summary';
 import { groupByTerm, instructorsOf } from '../lib/terms';
 import { professorSlug } from '../lib/professors';
 
@@ -82,6 +82,8 @@ export default function Course() {
       ) : (
         <CourseSyllabi
           code={code}
+          display={course.display}
+          rollup={course.rollup}
           term={term}
           setTerm={setTerm}
           terms={terms}
@@ -113,9 +115,10 @@ function CourseDetails({ course }) {
   );
 }
 
-function CourseSyllabi({ code, term, setTerm, terms, instructor, setInstructor, instructors, visible }) {
+function CourseSyllabi({ code, display, rollup, term, setTerm, terms, instructor, setInstructor, instructors, visible }) {
   return (
     <>
+      <CourseRollup display={display} record={rollup} />
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
         <TextField select label="Term" value={term} onChange={(e) => setTerm(e.target.value)} sx={{ minWidth: 180 }}>
           <MenuItem value={ALL}>All terms</MenuItem>
@@ -161,6 +164,37 @@ function CourseSyllabi({ code, term, setTerm, terms, instructor, setInstructor, 
         <UploadPrompt code={code} />
       </Box>
     </>
+  );
+}
+
+// "Across all professors, CS 310 usually covers...": one AI overview made from the
+// summaries of the course's syllabi. Only courses with two or more have one.
+function CourseRollup({ display, record }) {
+  const [open, setOpen] = useState(false);
+  if (!hasRollup(record?.rollup)) return null;
+  const { overview } = record.rollup;
+  return (
+    <Card variant="outlined" component="section" aria-label="Across all syllabi" sx={{ mb: 3 }} data-testid="course-rollup">
+      <CardContent sx={{ display: 'grid', gap: 1, '&:last-child': { pb: 2 } }}>
+        <Typography variant="subtitle1" component="p" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SummarizeIcon fontSize="small" color="primary" /> Across all syllabi for {display}
+        </Typography>
+        {overview && <Typography>{overview}</Typography>}
+        <Box>
+          <Button
+            size="small"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            endIcon={open ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          >
+            {open ? 'Less' : 'Topics, grading and differences'}
+          </Button>
+        </Box>
+        <Collapse in={open} unmountOnExit>
+          <SyllabusSummary record={record} hideOverview />
+        </Collapse>
+      </CardContent>
+    </Card>
   );
 }
 

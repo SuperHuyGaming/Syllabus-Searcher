@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { formToSummary, hasSummary, summaryCredit, summaryToForm } from './summary';
+import { formToSummary, hasRollup, hasSummary, summaryCredit, summaryToForm } from './summary';
 
 const SUMMARY = {
   overview: 'Data structures in Java.',
@@ -46,5 +46,20 @@ describe('summaryCredit', () => {
     expect(summaryCredit({ provider: 'Gemini', editedAt: '2026-11-03T12:00:00Z' })).toBe(
       'AI summary, checked by an admin Nov 3, 2026'
     );
+  });
+});
+
+describe('course rollups', () => {
+  test('the credit says how many syllabi the rollup was made from', () => {
+    expect(summaryCredit({ provider: 'Gemini', generatedAt: '2026-11-09T12:00:00Z', fileIds: ['a', 'b', 'c'] })).toBe(
+      'AI summary of 3 syllabi by Gemini, Nov 9, 2026'
+    );
+  });
+
+  test('hasRollup is true for an overview or differences alone', () => {
+    expect(hasRollup(null)).toBe(false);
+    expect(hasRollup({ overview: '', topics: [] })).toBe(false);
+    expect(hasRollup({ overview: 'Usually trees.' })).toBe(true);
+    expect(hasRollup({ differences: ['One uses Python.'] })).toBe(true);
   });
 });
