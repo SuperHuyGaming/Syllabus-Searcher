@@ -44,5 +44,7 @@ export const api = {
   regenerateSummary: (fileId, token) => post(`/admin/summaries/${fileId}/regenerate`, {}, token),
   adminProfessors: (token) => json('/admin/professors', { token }),
   // Without `apply` this is a preview: it lists what would change and writes nothing.
+  scrapeStatus: (token) => json('/admin/refresh', { token }),
+  startScrape: (token) => post('/admin/refresh', {}, token),
   mergeProfessors: ({ from, into, apply }, token) => post('/admin/professors/merge', { from, into, apply }, token),
 };

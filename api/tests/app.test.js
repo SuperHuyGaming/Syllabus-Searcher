@@ -668,3 +668,58 @@ describe('routing', () => {
     expect(parse(res)).toEqual({ dynamodb: 'ok', mongodb: 'ok', supabase: 'paused' });
   });
 });
+
+describe('admin refresh', () => {
+  const auth = { authorization: 'Bearer good' };
+  const withScrape = (run = null, enabled = true) => {
+    const deps = fakes();
+    deps.scrape = {
+      enabled,
+      latest: jest.fn().mockResolvedValue({ enabled, environment: 'staging', run }),
+      start: jest.fn().mockResolvedValue(),
+    };
+    return deps;
+  };
+
+  test('needs a signed-in admin', async () => {
+    const deps = withScrape();
+    const app = createApp(deps);
+    expect((await app(event('GET', '/api/admin/refresh'))).statusCode).toBe(401);
+    expect((await app(event('POST', '/api/admin/refresh'))).statusCode).toBe(401);
+    expect(deps.scrape.start).not.toHaveBeenCalled();
+  });
+
+  test('shows the latest run', async () => {
+    const run = { status: 'completed', conclusion: 'success', running: false };
+    const res = await createApp(withScrape(run))(event('GET', '/api/admin/refresh', { headers: auth }));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res)).toEqual({ enabled: true, environment: 'staging', run });
+  });
+
+  test('starts a scrape', async () => {
+    const deps = withScrape({ status: 'completed', running: false });
+    const res = await createApp(deps)(event('POST', '/api/admin/refresh', { headers: auth }));
+    expect(res.statusCode).toBe(202);
+    expect(deps.scrape.start).toHaveBeenCalled();
+  });
+
+  test('refuses while a scrape is running', async () => {
+    const deps = withScrape({ status: 'in_progress', running: true });
+    const res = await createApp(deps)(event('POST', '/api/admin/refresh', { headers: auth }));
+    expect(res.statusCode).toBe(409);
+    expect(deps.scrape.start).not.toHaveBeenCalled();
+  });
+
+  test('says so when the token is not set', async () => {
+    const res = await createApp(withScrape(null, false))(event('POST', '/api/admin/refresh', { headers: auth }));
+    expect(res.statusCode).toBe(503);
+  });
+
+  test('turns GitHub errors into a 502', async () => {
+    const deps = withScrape();
+    deps.scrape.latest.mockRejectedValue(new Error('GitHub answered 401: Bad credentials'));
+    const res = await createApp(deps)(event('GET', '/api/admin/refresh', { headers: auth }));
+    expect(res.statusCode).toBe(502);
+    expect(parse(res).error).toBe('GitHub answered 401: Bad credentials');
+  });
+});

@@ -59,6 +59,20 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ''
+  GithubDispatchToken:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Fine-grained token (Actions read and write, this repo only) for "Refresh now" on /admin; empty hides it
+  GithubRepo:
+    Type: String
+    Default: ''
+    Description: owner/name of the repository whose Scrape syllabi workflow "Refresh now" starts
+  SiteEnvironment:
+    Type: String
+    Default: ''
+    AllowedValues: ['', production, staging]
+    Description: Which site this stack is; "Refresh now" scrapes into this one
   OriginSecret:
     Type: String
     NoEcho: true
@@ -128,6 +142,9 @@ Resources:
           AI_FALLBACK_PROVIDER: !Ref AiFallbackProvider
           AI_FALLBACK_MODEL: !Ref AiFallbackModel
           AI_FALLBACK_API_KEY: !Ref AiFallbackApiKey
+          GITHUB_DISPATCH_TOKEN: !Ref GithubDispatchToken
+          GITHUB_REPO: !Ref GithubRepo
+          SITE_ENVIRONMENT: !Ref SiteEnvironment
           ORIGIN_SECRET: !Ref OriginSecret
           IP_HASH_SALT: !Ref IpHashSalt
       Policies:

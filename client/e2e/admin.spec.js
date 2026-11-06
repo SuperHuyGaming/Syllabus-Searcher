@@ -317,3 +317,41 @@ test('admin merges two spellings of a professor after a preview', async ({ page 
   expect(sent[1]).toEqual({ from: 'Gonzalez Hernandez, A', into: 'González, Ana', apply: true });
   await expect(page.getByRole('button', { name: /→ González, Ana/ })).toHaveCount(0);
 });
+
+test('admin starts a scrape from Site data and sees it running', async ({ page }) => {
+  let run = { status: 'completed', conclusion: 'success', running: false, event: 'schedule', startedAt: '2026-11-02T09:00:00Z', url: 'https://github.com/o/r/actions/runs/1' };
+  let started = 0;
+  await signIn(page);
+  await mockAdminApi(page);
+  await page.route('**/api/admin/refresh', (route) => {
+    if (route.request().method() === 'POST') {
+      started += 1;
+      run = { status: 'queued', conclusion: null, running: true, event: 'workflow_dispatch', startedAt: '2026-11-05T19:00:00Z', url: 'https://github.com/o/r/actions/runs/2' };
+      return route.fulfill({ status: 202, contentType: 'application/json', body: '{"started":true}' });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, environment: 'staging', run }) });
+  });
+
+  await page.goto('/admin');
+  await page.getByRole('tab', { name: 'Site data' }).click();
+  await expect(page.getByText('Runs the Scrape syllabi workflow for the staging site')).toBeVisible();
+  await expect(page.getByText(/Last run Nov \d, 2026 finished \(weekly run\)/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Refresh now' }).click();
+  await expect(page.getByText(/Running since Nov \d, 2026/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Refresh now' })).toBeDisabled();
+  await expect(page.getByRole('link', { name: 'View on GitHub' })).toHaveAttribute('href', 'https://github.com/o/r/actions/runs/2');
+  expect(started).toBe(1);
+});
+
+test('Site data says how to set up refresh when the token is missing', async ({ page }) => {
+  await signIn(page);
+  await mockAdminApi(page);
+  await page.route('**/api/admin/refresh', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"enabled":false,"environment":null,"run":null}' })
+  );
+  await page.goto('/admin');
+  await page.getByRole('tab', { name: 'Site data' }).click();
+  await expect(page.getByText(/Not set up on this site: add the GH_DISPATCH_TOKEN secret/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Refresh now' })).toBeDisabled();
+});

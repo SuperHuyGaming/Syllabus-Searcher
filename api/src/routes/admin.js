@@ -7,6 +7,7 @@ const { aiReview } = require('../lib/review');
 const { renameProfessor } = require('../lib/rename');
 const { summarize: aiSummarize, cleanSummary } = require('../lib/ai');
 const { summarizeFile } = require('../lib/summary');
+const { createScrapeTrigger } = require('../lib/github');
 
 const UUID = '([0-9a-f-]{36})';
 const FILE_ID = '([a-f0-9]{24})';
@@ -25,6 +26,7 @@ module.exports = ({
   checkUpload = aiCheck,
   readText = fileText,
   summarize = aiSummarize,
+  scrape = createScrapeTrigger(),
 }) => {
   async function requireAdmin(event) {
     const token = (header(event, 'authorization') || '').replace(/^Bearer\s+/i, '');
@@ -32,6 +34,15 @@ module.exports = ({
     const email = await uploads.adminEmail(token);
     if (!email) throw new HttpError(403, 'This account is not an admin');
     return email;
+  }
+
+  // GitHub errors (bad token, rate limit) become a 502 the admin page can show.
+  async function githubCall(fn) {
+    try {
+      return await fn();
+    } catch (err) {
+      throw new HttpError(502, err.message);
+    }
   }
 
   async function pendingUpload(id) {
@@ -314,6 +325,29 @@ module.exports = ({
         }
         await refreshSearch(old.fileId);
         return json(200, { deleted: true, fileDeleted: remaining.length === 0 }, NO_STORE);
+      },
+    },
+    {
+      // "Refresh now": the latest Scrape syllabi run for this site, if the token is set.
+      method: 'GET',
+      path: /^\/api\/admin\/refresh$/,
+      async handler({ event }) {
+        await requireAdmin(event);
+        return json(200, await githubCall(() => scrape.latest()), NO_STORE);
+      },
+    },
+    {
+      // Starts the Scrape syllabi workflow for this site, unless one is already running.
+      method: 'POST',
+      path: /^\/api\/admin\/refresh$/,
+      async handler({ event }) {
+        const reviewer = await requireAdmin(event);
+        if (!scrape.enabled) throw new HttpError(503, 'Refresh is not set up on this site (GITHUB_DISPATCH_TOKEN)');
+        const { run } = await githubCall(() => scrape.latest());
+        if (run?.running) throw new HttpError(409, 'A scrape is already running');
+        await githubCall(() => scrape.start());
+        console.log(`Scrape started by ${reviewer}`);
+        return json(202, { started: true }, NO_STORE);
       },
     },
   ];
