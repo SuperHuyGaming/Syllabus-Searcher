@@ -76,7 +76,7 @@ The cs.gmu.edu/syllabi/ page has returned 404 since late 2025 and the newest Int
 - [x] Record a "last updated" time per environment: the end of the last successful scrape and the time of the last approved upload, whichever is newer. Store it in DynamoDB (one small item) so no schema change is needed.
 - [x] Return it from the API (`GET /api/status` or on an existing response) and show "Last updated Nov 1, 2026" in the footer or on the home page.
 - [x] Optional: say on the home page that new terms come from uploads, with a link to the Upload page.
-- [ ] Optional: a "Refresh now" button on the admin page that starts the Scrape syllabi workflow through the GitHub API (`workflow_dispatch`, fine-grained token with Actions write on this repo only, kept in the environment secrets). Low value while the source page is offline; today the same thing is Actions → Scrape syllabi → Run workflow. Not built.
+- [x] Optional: a "Refresh now" button on the admin page (Site data tab) that starts the Scrape syllabi workflow for that site through the GitHub API (`workflow_dispatch`, fine-grained token with Actions read and write on this repo only, `GH_DISPATCH_TOKEN` in the environment secrets). It shows the latest run for the site, checks on it every 15 seconds while it runs, and refuses a second start while one is running.
 
 Built as one item, `PK=STATUS, SK=UPDATED`: the scraper sets `scrapedAt` at the end of a full run (`--index-only` and `--catalog-only` don't count) and approving an upload sets `uploadedAt`. `GET /api/status` returns both and `lastUpdated`, the newer one; the footer shows it as "Last updated Nov 1, 2026" and hides it until the first time is recorded.
 

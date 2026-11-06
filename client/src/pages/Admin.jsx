@@ -28,6 +28,7 @@ import { displayCourse } from '../lib/courses';
 import { likelySpellings } from '../lib/professors';
 import { fileCheckMessage, virusScanMessage } from '../lib/filecheck';
 import { aiCheckMessage } from '../lib/aicheck';
+import { scrapeRunMessage, updatedLabel } from '../lib/status';
 import { POLICIES, formToSummary, hasSummary, summaryCredit, summaryToForm } from '../lib/summary';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -141,10 +142,12 @@ function Dashboard({ token, email }) {
         <Tab value="pending" label={count ? `Pending uploads (${count})` : 'Pending uploads'} />
         <Tab value="published" label="Published syllabi" />
         <Tab value="professors" label="Professors" />
+        <Tab value="data" label="Site data" />
       </Tabs>
       {tab === 'pending' && <ReviewQueue token={token} />}
       {tab === 'published' && <Published token={token} />}
       {tab === 'professors' && <Professors token={token} />}
+      {tab === 'data' && <SiteData token={token} />}
     </>
   );
 }
@@ -497,6 +500,76 @@ function Published({ token }) {
 
 // Merges two spellings of one professor ("Gonzalez Hernandez, A" and "González, Ana")
 // on every syllabus at once. A preview comes first; nothing changes until "Merge".
+// "Refresh now": starts the Scrape syllabi workflow for this site through the API, then
+// checks on it every 15 seconds until it ends.
+function SiteData({ token }) {
+  const queryClient = useQueryClient();
+  const [startedAt, setStartedAt] = useState(null);
+  const { data: status } = useQuery({ queryKey: ['status'], queryFn: api.status });
+  const { data, error } = useQuery({
+    queryKey: ['scrape'],
+    queryFn: () => api.scrapeStatus(token),
+    // GitHub takes a few seconds to list a new run, so keep checking right after a start too.
+    refetchInterval: (query) =>
+      query.state.data?.run?.running || (startedAt && Date.now() - startedAt < 60000) ? 15000 : false,
+  });
+  const start = useMutation({
+    mutationFn: () => api.startScrape(token),
+    onSuccess: () => {
+      setStartedAt(Date.now());
+      queryClient.invalidateQueries({ queryKey: ['scrape'] });
+    },
+  });
+  const run = data?.run;
+  const updated = updatedLabel(status?.lastUpdated);
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
+        Refresh syllabi
+      </Typography>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        Runs the Scrape syllabi workflow for {data?.environment ? `the ${data.environment} site` : 'this site'} now
+        instead of waiting for Monday. It reads the GMU catalog and the archived syllabi pages and takes about 10
+        minutes. {updated && `Site last updated ${updated}.`}
+      </Typography>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error.message}</Alert>}
+      {data && !data.enabled && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Not set up on this site: add the GH_DISPATCH_TOKEN secret (docs/DEPLOY.md). Until then, use Actions → Scrape
+          syllabi → Run workflow on GitHub.
+        </Alert>
+      )}
+      {start.error && <Alert severity="error" sx={{ mb: 2 }}>{start.error.message}</Alert>}
+      {start.isSuccess && !run?.running && (
+        <Alert severity="success" sx={{ mb: 2 }}>Scrape started. It shows up here in a few seconds.</Alert>
+      )}
+      <Stack direction="row" spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button
+          variant="contained"
+          onClick={() => start.mutate()}
+          disabled={!data?.enabled || run?.running || start.isPending}
+        >
+          Refresh now
+        </Button>
+        {run && (
+          <Typography variant="body2" color="text.secondary">
+            {scrapeRunMessage(run)}
+            {run.url && (
+              <>
+                {' · '}
+                <Link href={run.url} target="_blank" rel="noopener">
+                  View on GitHub
+                </Link>
+              </>
+            )}
+          </Typography>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
+
 function Professors({ token }) {
   const queryClient = useQueryClient();
   const [from, setFrom] = useState(null);
