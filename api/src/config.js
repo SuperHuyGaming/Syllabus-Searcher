@@ -32,6 +32,12 @@ module.exports = {
   clamavHost: process.env.CLAMAV_HOST || '',
   clamavPort: Number(process.env.CLAMAV_PORT || 3310),
 
+  // "Refresh now" on /admin starts the Scrape syllabi workflow (src/lib/github.js).
+  // Off unless all three are set. SITE_ENVIRONMENT is "production" or "staging".
+  githubToken: process.env.GITHUB_DISPATCH_TOKEN || '',
+  githubRepo: process.env.GITHUB_REPO || '',
+  siteEnvironment: process.env.SITE_ENVIRONMENT || '',
+
   originSecret: process.env.ORIGIN_SECRET || '',
   ipHashSalt: process.env.IP_HASH_SALT || '',
   uploadsPerHour: Number(process.env.UPLOADS_PER_HOUR || 5),

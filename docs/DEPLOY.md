@@ -79,6 +79,7 @@ Then in each environment → **Add environment secret** for each row. Values mar
 | `AZURE_DI_ENDPOINT`, `AZURE_DI_KEY` | from step 4, or leave out |
 | `AI_API_KEY` | Gemini API key from aistudio.google.com/apikey (*same*), or leave out to turn the AI check and syllabus summaries off |
 | `AI_FALLBACK_API_KEY` | Groq API key from console.groq.com/keys (*same*), or leave out |
+| `GH_DISPATCH_TOKEN` | Optional, for **Refresh now** on /admin → Site data. A fine-grained personal access token (GitHub → Settings → Developer settings → Fine-grained tokens): repository access *only this repository*, permission *Actions: Read and write*. The same token can go in both environments. Leave out to hide the button; the Scrape syllabi workflow still runs weekly and from the Actions tab |
 
 Optional environment variables (not secrets): `AI_PROVIDER` (`gemini` or `groq`, default `gemini`), `AI_MODEL`, `AI_FALLBACK_PROVIDER` (set it to `groq` to use the fallback key), `AI_FALLBACK_MODEL`. Empty models use the defaults in `api/src/lib/ai.js`.
 

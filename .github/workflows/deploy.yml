@@ -114,6 +114,7 @@ jobs:
           AZURE_DI_KEY: ${{ secrets.AZURE_DI_KEY }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_FALLBACK_API_KEY: ${{ secrets.AI_FALLBACK_API_KEY }}
+          GITHUB_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
           ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
           IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
         run: |
@@ -134,6 +135,9 @@ jobs:
           add AiFallbackProvider "${{ vars.AI_FALLBACK_PROVIDER }}"
           add AiFallbackModel "${{ vars.AI_FALLBACK_MODEL }}"
           add AiFallbackApiKey "$AI_FALLBACK_API_KEY"
+          add GithubDispatchToken "$GITHUB_DISPATCH_TOKEN"
+          add GithubRepo "${{ github.repository }}"
+          add SiteEnvironment "${{ needs.target.outputs.environment }}"
           add OriginSecret "$ORIGIN_SECRET"
           add IpHashSalt "$IP_HASH_SALT"
           add ReservedConcurrency "${{ vars.RESERVED_CONCURRENCY || 0 }}"

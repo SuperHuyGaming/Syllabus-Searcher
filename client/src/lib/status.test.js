@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { updatedLabel } from './status';
+import { scrapeRunMessage, updatedLabel } from './status';
 
 describe('updatedLabel', () => {
   test('shows the date the way the footer says it', () => {
@@ -12,5 +12,22 @@ describe('updatedLabel', () => {
     expect(updatedLabel(null)).toBe('');
     expect(updatedLabel(undefined)).toBe('');
     expect(updatedLabel('not a date')).toBe('');
+  });
+});
+
+describe('scrapeRunMessage', () => {
+  const startedAt = '2026-11-05T19:00:00Z';
+  test('says nothing without a run', () => {
+    expect(scrapeRunMessage(null)).toBe('');
+  });
+  test('describes a running scrape', () => {
+    expect(scrapeRunMessage({ running: true, status: 'queued', startedAt })).toBe('Running since Nov 5, 2026');
+  });
+  test('describes a finished or failed one', () => {
+    expect(scrapeRunMessage({ status: 'completed', conclusion: 'success', startedAt })).toBe('Last run Nov 5, 2026 finished');
+    expect(scrapeRunMessage({ status: 'completed', conclusion: 'failure', startedAt, event: 'schedule' })).toBe(
+      'Last run Nov 5, 2026 failed (weekly run)'
+    );
+    expect(scrapeRunMessage({ status: 'completed', conclusion: 'skipped' })).toBe('Last run ended (skipped)');
   });
 });

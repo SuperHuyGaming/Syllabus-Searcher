@@ -1,6 +1,8 @@
 # Re-scrapes GMU CS syllabi into the cloud stores (DynamoDB + MongoDB Atlas) every week,
 # for both environments. Each environment skips quietly until its secrets exist.
 name: Scrape syllabi
+# Manual runs (and "Refresh now" on /admin) name the site, so the admin page can find its own run.
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Scrape syllabi ({0})', inputs.environment) || 'Scrape syllabi' }}
 
 on:
   schedule:
@@ -24,6 +26,8 @@ jobs:
       matrix:
         environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production","staging"]') }}
     environment: ${{ matrix.environment }}
+    # One scrape per site at a time; a second one waits for the first.
+    concurrency: scrape-${{ matrix.environment }}
     steps:
       - name: Check secrets
         id: check
