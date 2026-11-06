@@ -50,10 +50,12 @@ When an upload is approved (and once, as a backfill, for scraped syllabi):
 - [x] Generate a structured summary per syllabus: what the course covers (main topics), prerequisites and expected background, languages/tools used, textbook(s), grading breakdown, workload (projects, exams, homework), notable policies (late work, attendance, AI use).
 - [x] Store it in DynamoDB with the model and date it was generated. It sits in its own item per file (`PK=SUMMARY`, `SK=<fileId>`) rather than on the offering, because the weekly scrape rewrites offerings and would drop it; a cross-listed syllabus shares one summary.
 - [x] Show it on the course page per professor and term ("Summary" button on each syllabus), so students can compare how different professors teach the same course.
-- [ ] Optional: a course-level rollup ("across all professors, CS 310 usually covers...").
+- [x] A course-level rollup ("across all professors, CS 310 usually covers..."): an "Across all syllabi" card at the top of the course page, for courses with two or more summarized syllabi.
 - [x] Let the admin edit or regenerate a summary (/admin → Published syllabi → Summary).
 
 Built in `api/src/lib/ai.js` (`summarize`, `cleanSummary`) and `api/src/lib/summary.js`. Approving an upload summarizes it with a 7-second limit (Lambda stops at 20); if that runs out, "Regenerate" or the next weekly run fills it in. Scraped syllabi are backfilled by `api/scripts/summarize.js` from the **Summarize syllabi** workflow (Mondays after the scrape, and on demand), up to 40 files per run with the same Gemini key as the AI check rather than GitHub Models, so there's one provider to look after.
+
+Rollups are built in the same run, after the file summaries, from those summaries rather than the files (`api/src/lib/rollup.js`, `summarizeCourse` in `ai.js`): the newest 12 summarized syllabi of a course go in one prompt, and the answer is saved as `PK=ROLLUP`, `SK=<course code>` with the file ids it was made from. A rollup is rebuilt only when that set of files changes or one of its summaries is regenerated or edited, up to 20 a run (`--rollups`), and removed when fewer than two summarized syllabi are left. There is no admin editing for rollups; "Run workflow" with `redo` rebuilds them all.
 
 ### 5. Catch wrong course codes and fix published syllabi (done)
 
