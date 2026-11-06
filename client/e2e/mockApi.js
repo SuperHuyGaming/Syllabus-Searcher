@@ -27,6 +27,20 @@ const cs310 = {
   credits: '3',
   description: 'Fundamental data structures and their implementations.',
   prereqs: 'CS 211 (C) and MATH 113 (C)',
+  rollup: {
+    rollup: {
+      overview: 'Across these syllabi, CS 310 usually covers lists, trees and hashing in Java.',
+      topics: ['Linked lists', 'Hash tables'],
+      tools: ['Java'],
+      grading: [{ item: 'Projects', weight: '30-40%' }],
+      workload: ['4 to 6 programming projects'],
+      textbooks: [],
+      differences: ['Masri, W gives weekly quizzes; Russell, K does not.'],
+    },
+    provider: 'Gemini',
+    generatedAt: '2026-11-09T12:00:00Z',
+    fileIds: [FILE_A, FILE_B],
+  },
   offerings: [
     {
       termKey: '2024-3',

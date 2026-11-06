@@ -57,6 +57,20 @@ describe('summaries in the catalog', () => {
     const course = await createCatalog({ client, tableName: 'T' }).getCourse('CS310');
     expect(course.offerings[0].summary.summary.overview).toBe('About a');
     expect(course.offerings[1].summary).toBeNull();
+    expect(course.rollup).toBeNull();
+  });
+
+  test('a course includes its rollup when there is one', async () => {
+    const client = fakeClient((name, input) => {
+      if (name === 'QueryCommand') return { Items: [{ SK: 'META', title: 'Data Structures' }] };
+      if (name === 'GetCommand' && input.Key.PK === 'ROLLUP' && input.Key.SK === 'CS310') {
+        return { Item: { PK: 'ROLLUP', SK: 'CS310', rollup: { overview: 'Usually trees.' }, provider: 'Gemini', fileIds: ['a', 'b'] } };
+      }
+      return {};
+    });
+    const course = await createCatalog({ client, tableName: 'T' }).getCourse('CS310');
+    expect(course.rollup).toEqual(expect.objectContaining({ rollup: { overview: 'Usually trees.' }, provider: 'Gemini', fileIds: ['a', 'b'] }));
+    expect(course.rollup).not.toHaveProperty('PK');
   });
 });
 

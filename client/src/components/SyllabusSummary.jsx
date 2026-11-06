@@ -3,14 +3,16 @@ import { POLICIES, summaryCredit } from '../lib/summary';
 
 // The AI summary of one syllabus, shown under its card on the course page.
 // `record` is { summary, provider, generatedAt, editedAt } from the API.
-export default function SyllabusSummary({ record }) {
-  const s = record.summary;
+// The course rollup uses it too, as { rollup, provider, generatedAt, fileIds },
+// with the overview shown above it rather than inside.
+export default function SyllabusSummary({ record, hideOverview = false }) {
+  const s = record.summary || record.rollup;
   const policies = POLICIES.filter(({ field }) => s.policies?.[field]);
 
   return (
-    <Box sx={{ display: 'grid', gap: 1.5 }} data-testid="syllabus-summary">
-      {s.overview && <Typography>{s.overview}</Typography>}
-      <Part title="Topics" items={s.topics} chips />
+    <Box sx={{ display: 'grid', gap: 1.5 }} data-testid={record.rollup ? 'course-rollup-details' : 'syllabus-summary'}>
+      {s.overview && !hideOverview && <Typography>{s.overview}</Typography>}
+      <Part title={record.rollup ? 'Common topics' : 'Topics'} items={s.topics} chips />
       <Part title="Languages and tools" items={s.tools} chips />
       {s.grading?.length > 0 && (
         <Part title="Grading">
@@ -30,6 +32,7 @@ export default function SyllabusSummary({ record }) {
       )}
       <Part title="Workload" items={s.workload} />
       <Part title="Textbooks" items={s.textbooks} />
+      <Part title="How professors differ" items={s.differences} />
       {s.prerequisites && <Part title="Background">{s.prerequisites}</Part>}
       {policies.length > 0 && (
         <Part title="Policies">

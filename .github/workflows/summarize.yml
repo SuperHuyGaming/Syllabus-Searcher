@@ -1,5 +1,5 @@
 # Writes AI summaries for syllabi that don't have one yet (api/scripts/summarize.js),
-# for both environments. Runs after the weekly scrape, and on demand for the first
+# then the course-level rollups whose syllabi changed, for both environments. Runs after the weekly scrape, and on demand for the first
 # backfill. Free AI tiers cap requests per day, so each run does a limited batch.
 name: Summarize syllabi
 
@@ -16,8 +16,11 @@ on:
       limit:
         description: Most files to summarize in this run
         default: '40'
+      rollups:
+        description: Most course rollups to rebuild in this run (0 to skip)
+        default: '20'
       redo:
-        description: Also replace existing summaries, including admin edits
+        description: Also replace existing summaries and rollups, including admin edits
         type: boolean
         default: false
 
@@ -52,6 +55,7 @@ jobs:
         working-directory: api
         env:
           LIMIT: ${{ inputs.limit || '40' }}
+          ROLLUPS: ${{ inputs.rollups || '20' }}
           REDO: ${{ inputs.redo && '--redo' || '' }}
           # Same names the deploy workflow gives each environment's stack and database.
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
@@ -68,4 +72,4 @@ jobs:
           AI_FALLBACK_API_KEY: ${{ secrets.AI_FALLBACK_API_KEY }}
         run: |
           npm ci --omit=dev
-          node scripts/summarize.js --limit "$LIMIT" $REDO | tee -a "$GITHUB_STEP_SUMMARY"
+          node scripts/summarize.js --limit "$LIMIT" --rollups "$ROLLUPS" $REDO | tee -a "$GITHUB_STEP_SUMMARY"

@@ -21,11 +21,18 @@ export function hasSummary(summary) {
 }
 
 // "AI summary by Gemini, Nov 2, 2026" or "Edited by an admin, Nov 3, 2026".
+// A course rollup says how many syllabi it was made from: "AI summary of 4 syllabi by Gemini, ...".
 export function summaryCredit(record) {
   const date = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { dateStyle: 'medium' }) : '');
   if (record?.editedAt) return `AI summary, checked by an admin ${date(record.editedAt)}`.trim();
+  const of = record?.fileIds?.length ? ` of ${record.fileIds.length} syllabi` : '';
   const by = record?.provider ? ` by ${record.provider}` : '';
-  return `AI summary${by}${record?.generatedAt ? `, ${date(record.generatedAt)}` : ''}`;
+  return `AI summary${of}${by}${record?.generatedAt ? `, ${date(record.generatedAt)}` : ''}`;
+}
+
+// True when a course rollup has anything worth showing.
+export function hasRollup(rollup) {
+  return Boolean(rollup && (rollup.overview || rollup.differences?.length || hasSummary(rollup)));
 }
 
 export function summaryToForm(summary = {}) {

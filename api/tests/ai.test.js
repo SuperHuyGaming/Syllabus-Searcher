@@ -1,5 +1,5 @@
 const config = require('../src/config');
-const { checkUpload, summarize, cleanSummary, redact, parseAnswer } = require('../src/lib/ai');
+const { checkUpload, summarize, summarizeCourse, cleanSummary, cleanRollup, redact, parseAnswer } = require('../src/lib/ai');
 const { htmlText } = require('../src/lib/text');
 
 const DETAILS = { course: 'CS 310', title: 'Data Structures', term: 'Fall 2024', section: '001', instructor: 'Ada Lovelace' };
@@ -216,5 +216,50 @@ describe('summarize', () => {
     expect((await summarize('tiny', { fetchImpl })).unavailable).toMatch(/Almost no text/);
     expect((await summarize(TEXT, { fetchImpl })).unavailable).toBe('Gemini free quota used up.');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('summarizeCourse', () => {
+  const COURSE = { display: 'CS 310', title: 'Data Structures' };
+  const SOURCES = [
+    { label: 'Fall 2024, Lovelace, Ada', summary: SUMMARY },
+    { label: 'Spring 2024, Hopper, Grace', summary: { ...SUMMARY, tools: ['Python'] } },
+  ];
+  const ROLLUP = {
+    overview: 'Across these syllabi, CS 310 usually covers lists and trees.',
+    topics: ['Lists', 'Trees'],
+    tools: ['Java'],
+    textbooks: [],
+    grading: [{ item: 'Projects', weight: '30-40%' }],
+    workload: ['5 projects'],
+    differences: ['Hopper, Grace uses Python.'],
+  };
+
+  test('sends every syllabus summary with its label and returns a clean rollup', async () => {
+    useKeys();
+    const fetchImpl = jest.fn().mockResolvedValue(gemini({ ...ROLLUP, extra: 'x' }));
+    const result = await summarizeCourse(COURSE, SOURCES, { fetchImpl });
+    expect(result).toEqual(expect.objectContaining({ rollup: ROLLUP, provider: 'Gemini' }));
+    const sent = JSON.parse(fetchImpl.mock.calls[0][1].body).contents[0].parts[0].text;
+    expect(sent).toContain('Course: CS 310 (Data Structures)');
+    expect(sent).toContain('## Spring 2024, Hopper, Grace');
+    expect(sent).toContain('"Python"');
+  });
+
+  test('needs two syllabi, a key and a usable answer', async () => {
+    Object.assign(config, { aiApiKey: '', aiFallbackApiKey: '' });
+    expect((await summarizeCourse(COURSE, SOURCES)).unavailable).toMatch(/AI_API_KEY/);
+    useKeys();
+    const fetchImpl = jest.fn().mockResolvedValue(gemini({ overview: '', topics: [] }));
+    expect((await summarizeCourse(COURSE, SOURCES.slice(0, 1), { fetchImpl })).unavailable).toMatch(/two/);
+    expect((await summarizeCourse(COURSE, SOURCES, { fetchImpl })).unavailable).toBe('Gemini answer had no rollup.');
+  });
+
+  test('cleanRollup keeps known fields and caps the lists', () => {
+    const clean = cleanRollup({ overview: ' x ', differences: Array.from({ length: 9 }, (_, i) => `d${i}`), policies: {} });
+    expect(clean.overview).toBe('x');
+    expect(clean.differences).toHaveLength(6);
+    expect(clean.topics).toEqual([]);
+    expect(clean).not.toHaveProperty('policies');
   });
 });

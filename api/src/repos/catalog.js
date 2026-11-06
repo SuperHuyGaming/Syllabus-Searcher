@@ -9,6 +9,8 @@
 //   PK=SUMMARY        SK=<fileId>                         -> AI summary of one syllabus file. Kept apart
 //                                                            from the offering, which the weekly scrape
 //                                                            rewrites; a cross-listed file shares one
+//   PK=ROLLUP         SK=CS310                            -> AI overview of a course made from its syllabi's
+//                                                            summaries (lib/rollup.js)
 //   PK=STATUS         SK=UPDATED                          -> scrapedAt (end of the last full scrape, set by
 //                                                            the scraper) and uploadedAt (last approved upload)
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
@@ -24,6 +26,14 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 const config = require('../config');
 const { displayCourse } = require('../lib/terms');
+
+const rollupRecord = ({ rollup, provider, model, generatedAt, fileIds }) => ({
+  rollup,
+  provider,
+  model,
+  generatedAt,
+  fileIds: fileIds || [],
+});
 
 function createCatalog({ client, tableName = config.tableName } = {}) {
   const db =
@@ -105,7 +115,10 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
           contentType,
           source,
         }));
-      const summaries = await this.getSummaries(offerings.map((o) => o.fileId));
+      const [summaries, rollup] = await Promise.all([
+        this.getSummaries(offerings.map((o) => o.fileId)),
+        this.getRollup(code),
+      ]);
       for (const o of offerings) o.summary = summaries.get(o.fileId) || null;
       return {
         code,
@@ -114,6 +127,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
         credits: meta.credits || '',
         description: meta.description || '',
         prereqs: meta.prereqs || '',
+        rollup,
         offerings,
       };
     },
@@ -291,6 +305,26 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
 
     async deleteSummary(fileId) {
       await db.send(new DeleteCommand({ TableName: tableName, Key: { PK: 'SUMMARY', SK: fileId } }));
+    },
+
+    // A course's rollup as { rollup, provider, model, generatedAt, fileIds }, or null.
+    async getRollup(code) {
+      const { Item } = await db.send(new GetCommand({ TableName: tableName, Key: { PK: 'ROLLUP', SK: code } }));
+      return Item ? rollupRecord(Item) : null;
+    },
+
+    // Every saved rollup, as a Map of course code -> record, for the backfill.
+    async listRollups() {
+      const items = await queryAll({ KeyConditionExpression: 'PK = :pk', ExpressionAttributeValues: { ':pk': 'ROLLUP' } });
+      return new Map(items.map((item) => [item.SK, rollupRecord(item)]));
+    },
+
+    async putRollup(code, record) {
+      await db.send(new PutCommand({ TableName: tableName, Item: { PK: 'ROLLUP', SK: code, ...record } }));
+    },
+
+    async deleteRollup(code) {
+      await db.send(new DeleteCommand({ TableName: tableName, Key: { PK: 'ROLLUP', SK: code } }));
     },
 
     // When the data last changed, as { scrapedAt, uploadedAt } (either may be missing).

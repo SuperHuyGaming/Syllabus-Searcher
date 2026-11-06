@@ -77,6 +77,8 @@ Put a Gemini API key (aistudio.google.com/apikey) in `AI_API_KEY`, and optionall
 
 The same key also writes a short summary of each syllabus for its course page: topics, languages and tools, grading breakdown, workload, textbooks and the late work, attendance and AI policies. Students open it with the "Summary" button on a syllabus, so they can compare how professors teach the same course. An upload is summarized when it's approved; scraped syllabi are filled in by the weekly **Summarize syllabi** workflow (`api/scripts/summarize.js`, or `npm run summarize` in `api/` locally), a batch per run to stay inside the free quota. Summaries are stored per file (`PK=SUMMARY`), so a re-scrape keeps them. In /admin → Published syllabi, "Summary" on any syllabus edits a summary or regenerates it.
 
+Courses with two or more summarized syllabi also get an "Across all syllabi" card at the top of their page: one overview of what the course usually covers, its common topics and grading, and how professors differ. The same workflow builds it from the per-syllabus summaries (`PK=ROLLUP`) and rebuilds it only when those change.
+
 ## Where the courses and syllabi come from
 
 The course list comes from GMU's official catalog, `catalog.gmu.edu/courses/cs/` (title, credits, description, prerequisites). Every scrape reloads it, or run just that step with `docker compose run --rm scraper --catalog-only`.
