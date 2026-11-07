@@ -17,6 +17,9 @@ import {
   Typography,
 } from '@mui/material';
 import { api } from '../api';
+import { useSchool } from '../components/School';
+import { DEFAULT_SCHOOL, coursePath } from '../lib/courses';
+import { pickDepartment, sortDepartments } from '../lib/departments';
 
 // The text once the user stops typing for a moment, so search doesn't run on every key.
 function useDebounced(value, ms = 250) {
@@ -28,14 +31,14 @@ function useDebounced(value, ms = 250) {
   return settled;
 }
 
-// Finds a course in any department by code ("math 113") or title ("calculus").
-function CourseSearch() {
+// Finds a course in any of the school's departments by code ("math 113") or title ("calculus").
+function CourseSearch({ school }) {
   const navigate = useNavigate();
   const [input, setInput] = useState('');
   const q = useDebounced(input.trim());
   const { data, isFetching } = useQuery({
-    queryKey: ['find-courses', q],
-    queryFn: () => api.findCourses(q),
+    queryKey: ['find-courses', school.key, q],
+    queryFn: () => api.findCourses(q, school.key),
     enabled: q.length >= 2,
     placeholderData: keepPreviousData,
   });
@@ -50,8 +53,8 @@ function CourseSearch() {
       isOptionEqualToValue={(a, b) => a.code === b.code}
       inputValue={input}
       onInputChange={(_, next) => setInput(next)}
-      onChange={(_, course) => course && navigate(`/courses/${course.code}`)}
-      noOptionsText={input.trim().length < 2 ? 'Type a course code or name' : 'No GMU course matches'}
+      onChange={(_, course) => course && navigate(coursePath(course.code))}
+      noOptionsText={input.trim().length < 2 ? 'Type a course code or name' : `No ${school.short} course matches`}
       renderOption={({ key, ...props }, c) => (
         <li key={key} {...props}>
           <Box>
@@ -72,24 +75,34 @@ function CourseSearch() {
   );
 }
 
-// Departments with syllabi first, then the rest, each A to Z.
-function sortDepartments(departments) {
-  return [...departments].sort(
-    (a, b) => Number(b.withSyllabi > 0) - Number(a.withSyllabi > 0) || a.name.localeCompare(b.name)
-  );
-}
-
 export default function Home() {
   const [params, setParams] = useSearchParams();
-  const dept = (params.get('dept') || 'CS').toUpperCase();
-  const { data: deptData } = useQuery({ queryKey: ['departments'], queryFn: api.departments });
+  const { school } = useSchool();
+  const { data: deptData } = useQuery({
+    queryKey: ['departments', school.key],
+    queryFn: () => api.departments(school.key),
+  });
   const departments = useMemo(() => sortDepartments(deptData?.departments || []), [deptData]);
-  const { data, isPending, error } = useQuery({ queryKey: ['courses', dept], queryFn: () => api.courses(dept) });
+  const dept = pickDepartment(departments, school.key, params.get('dept'));
+  const { data, isPending, error } = useQuery({
+    queryKey: ['courses', dept],
+    queryFn: () => api.courses(dept),
+    enabled: Boolean(dept),
+  });
   const courses = data?.courses || [];
   const [onlyWithSyllabi, setOnlyWithSyllabi] = useState(false);
   const listed = onlyWithSyllabi ? courses.filter((c) => c.hasSyllabi) : courses;
   const withSyllabi = courses.filter((c) => c.hasSyllabi).length;
-  const current = departments.find((d) => d.code === dept) || { code: dept, name: data?.name || dept, withSyllabi };
+  const current = departments.find((d) => d.code === dept) || {
+    code: dept || '',
+    display: data?.display || '',
+    name: data?.name || '',
+    withSyllabi,
+  };
+  const gmu = school.key === DEFAULT_SCHOOL;
+  // The address keeps the school and a department other than the default, so links can be shared.
+  const pick = (d) =>
+    setParams({ ...(!gmu && { school: school.key }), ...(!(gmu && d.code === 'CS') && { dept: d.display }) });
 
   return (
     <>
@@ -98,18 +111,19 @@ export default function Home() {
           Find a syllabus
         </Typography>
         <Typography color="text.secondary" sx={{ mt: 1 }}>
-          Search any GMU course to see who taught it each term and read their syllabus.
+          Search any {school.short} course to see who taught it each term and read their syllabus.
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Most syllabi so far are Computer Science, from GMU&apos;s old syllabus page. Every other department
-          depends on students.{' '}
+          {gmu
+            ? "Most syllabi so far are Computer Science, from GMU's old syllabus page. Every other department depends on students."
+            : `${school.short} syllabi come from students, so the site starts with ${school.short}'s course catalog.`}{' '}
           <Link component={RouterLink} to="/upload">
             Upload one that&apos;s missing
           </Link>
         </Typography>
       </Box>
 
-      <CourseSearch />
+      <CourseSearch key={school.key} school={school} />
       <Typography variant="body2" color="text.secondary" sx={{ mb: 5, textAlign: 'center' }}>
         Looking for a language, textbook or policy?{' '}
         <Link component={RouterLink} to="/search">
@@ -122,13 +136,13 @@ export default function Home() {
         value={current}
         disableClearable
         groupBy={(d) => (d.withSyllabi > 0 ? 'Have syllabi' : 'No syllabi yet')}
-        getOptionLabel={(d) => `${d.name} (${d.code})`}
+        getOptionLabel={(d) => (d.name ? `${d.name} (${d.display})` : '')}
         isOptionEqualToValue={(a, b) => a.code === b.code}
-        onChange={(_, d) => d && setParams(d.code === 'CS' ? {} : { dept: d.code })}
+        onChange={(_, d) => d && pick(d)}
         renderOption={({ key, ...props }, d) => (
           <li key={key} {...props}>
             <Box sx={{ flexGrow: 1 }}>
-              {d.name} ({d.code})
+              {d.name} ({d.display})
             </Box>
             {d.withSyllabi > 0 && (
               <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>

@@ -67,3 +67,8 @@ export function likelySpellings(names) {
     .map((group) => [...group].sort((a, b) => firstNameLength(b) - firstNameLength(a) || b.length - a.length))
     .sort((a, b) => a[0].localeCompare(b[0]));
 }
+
+// A professor's page. Names are per school, so the address says which school's.
+export function professorPath(slug, school) {
+  return school && school !== 'gmu' ? `/professors/${slug}?school=${school}` : `/professors/${slug}`;
+}

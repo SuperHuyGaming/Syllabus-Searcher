@@ -1,4 +1,4 @@
-const { snippet, terms } = require('../src/repos/search');
+const { snippet, terms, schoolFilter } = require('../src/repos/search');
 
 describe('search helpers', () => {
   test('terms keep phrases and drop negations and tiny words', () => {
@@ -26,5 +26,17 @@ describe('search helpers', () => {
 
   test('snippet starts at the top when nothing matches', () => {
     expect(snippet('Course overview and goals', ['zzz'])).toBe('Course overview and goals');
+  });
+});
+
+describe('search per school', () => {
+  test('GMU means codes without a school prefix', () => {
+    const { codes } = schoolFilter('gmu');
+    expect(codes.$not.test('CS310')).toBe(false);
+    expect(codes.$not.test('unc:COMP110')).toBe(true);
+  });
+
+  test('other schools match their prefix', () => {
+    expect(schoolFilter('unc')).toEqual({ codes: { $regex: '^unc:' } });
   });
 });

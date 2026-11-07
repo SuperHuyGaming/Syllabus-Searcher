@@ -9,23 +9,43 @@ const courses = [
   { code: 'CS483', display: 'CS 483', title: 'Analysis of Algorithms', hasSyllabi: true },
 ];
 
-const departments = [
-  { code: 'CS', name: 'Computer Science', courses: 3, withSyllabi: 2 },
-  { code: 'MATH', name: 'Mathematics', courses: 1, withSyllabi: 0 },
+const schools = [
+  { key: 'gmu', name: 'George Mason University', short: 'GMU', departments: 2, courses: 4 },
+  { key: 'unc', name: 'University of North Carolina at Chapel Hill', short: 'UNC', departments: 2, courses: 2 },
 ];
+
+// GMU keys are bare ("CS"); other schools' carry the school ("unc:COMP"), like the API.
+const departments = {
+  gmu: [
+    { code: 'CS', display: 'CS', name: 'Computer Science', courses: 3, withSyllabi: 2 },
+    { code: 'MATH', display: 'MATH', name: 'Mathematics', courses: 1, withSyllabi: 0 },
+  ],
+  unc: [
+    { code: 'unc:AERO', display: 'AERO', name: 'Aerospace Studies', courses: 1, withSyllabi: 0 },
+    { code: 'unc:COMP', display: 'COMP', name: 'Computer Science', courses: 1, withSyllabi: 0 },
+  ],
+};
 const coursesByDept = {
   CS: courses,
   MATH: [{ code: 'MATH113', display: 'MATH 113', title: 'Analytic Geometry and Calculus I', hasSyllabi: false }],
+  'unc:AERO': [{ code: 'unc:AERO101', display: 'AERO 101', title: 'Heritage and Values', hasSyllabi: false }],
+  'unc:COMP': [{ code: 'unc:COMP110', display: 'COMP 110', title: 'Introduction to Programming', hasSyllabi: false }],
 };
 
-// Same matching as the API: a code prefix ("math 1") or every word in the title.
-function findCourses(q) {
+const schoolOf = (code) => code.match(/^([a-z]+):/)?.[1] || 'gmu';
+
+// Same matching as the API: a code prefix ("math 1") or every word in the title, in one school.
+function findCourses(q, school) {
   const code = q.replace(/[\s-]+/g, '').toUpperCase();
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   return Object.values(coursesByDept)
     .flat()
-    .filter((c) => c.code.startsWith(code) || words.every((w) => c.title.toLowerCase().includes(w)));
+    .filter((c) => schoolOf(c.code) === school)
+    .filter((c) => c.code.replace(/^[a-z]+:/, '').startsWith(code) || words.every((w) => c.title.toLowerCase().includes(w)));
 }
+
+// A catalog course page with no syllabi, as the API returns it.
+const catalogCourse = (c) => ({ ...c, credits: '3', description: '', prereqs: '', rollup: null, offerings: [], school: schoolOf(c.code) });
 
 // In the official catalog but no syllabus on file yet.
 const cs105 = {
@@ -148,19 +168,26 @@ export async function mockApi(page, { onUpload } = {}) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
-    if (path === '/api/departments') return route.fulfill(json({ departments }));
+    const school = url.searchParams.get('school') || 'gmu';
+    if (path === '/api/schools') return route.fulfill(json({ schools }));
+    if (path === '/api/departments') return route.fulfill(json({ school, departments: departments[school] || [] }));
     if (path === '/api/courses') {
       const q = url.searchParams.get('q');
-      if (q !== null) return route.fulfill(json({ query: q, courses: findCourses(q.trim()) }));
-      const dept = (url.searchParams.get('dept') || 'CS').toUpperCase();
-      const name = departments.find((d) => d.code === dept)?.name;
-      if (!name) return route.fulfill(json({ error: `${dept} isn't a GMU department` }, 404));
-      return route.fulfill(json({ dept, name, courses: coursesByDept[dept] }));
+      if (q !== null) return route.fulfill(json({ query: q, courses: findCourses(q.trim(), school) }));
+      const raw = url.searchParams.get('dept') || 'CS';
+      const dept = raw.includes(':') ? raw : school === 'gmu' ? raw.toUpperCase() : school + ':' + raw.toUpperCase();
+      const found = Object.values(departments).flat().find((d) => d.code === dept);
+      if (!found) return route.fulfill(json({ error: raw + " isn't a department" }, 404));
+      return route.fulfill(json({ dept, display: found.display, name: found.name, courses: coursesByDept[dept] }));
     }
+    const other = Object.values(coursesByDept)
+      .flat()
+      .find((c) => !['CS310', 'CS105'].includes(c.code) && [c.code, encodeURIComponent(c.code)].some((x) => path === '/api/courses/' + x));
+    if (other) return route.fulfill(json(catalogCourse(other)));
     if (path === '/api/courses/CS310') return route.fulfill(json(cs310));
     if (path === '/api/courses/CS105') return route.fulfill(json(cs105));
     if (path.startsWith('/api/courses/')) return route.fulfill(json({ error: 'No syllabi found for CS999' }, 404));
-    if (path === '/api/professors') return route.fulfill(json({ professors }));
+    if (path === '/api/professors') return route.fulfill(json({ school, professors: school === 'gmu' ? professors : [] }));
     if (path === '/api/status') {
       const lastUpdated = '2026-11-01T12:00:00.000Z';
       return route.fulfill(json({ lastUpdated, scrapedAt: lastUpdated, uploadedAt: null }));

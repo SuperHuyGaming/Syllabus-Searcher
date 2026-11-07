@@ -1,7 +1,7 @@
 """Writes scraped syllabi to the same stores the API reads:
 files -> MongoDB GridFS bucket "syllabi", courses with syllabi and their offerings -> DynamoDB
 (layout in api/src/repos/catalog.js), searchable text -> MongoDB collection "syllabus_text"
-(read by api/src/repos/search.js), GMU's official catalog -> MongoDB collections "departments"
+(read by api/src/repos/search.js), course catalogs -> MongoDB collections "schools", "departments"
 and "courses" (read by api/src/repos/departments.js).
 """
 
@@ -19,6 +19,7 @@ from pymongo import MongoClient, UpdateOne
 
 from .names import full_name, needs_full_name
 from .pdf import PdfMaker
+from .schools import DEFAULT_SCHOOL, school_code
 from .text import extract_text
 
 log = logging.getLogger("scraper")
@@ -122,30 +123,42 @@ class Store:
             ExpressionAttributeValues={":now": datetime.now(timezone.utc).isoformat()},
         )
 
-    def save_department(self, department, courses):
+    def save_school(self, school, departments, courses):
+        """Lists a school on the site with how many departments and courses its catalog has."""
+        self.db["schools"].update_one(
+            {"_id": school["key"]},
+            {"$set": {"name": school["name"], "short": school["short"], "departments": departments,
+                      "courses": courses, "updatedAt": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+
+    def save_department(self, school, department, courses):
         """Writes one department and every course the catalog lists for it, with or without
         a syllabus. Courses the catalog dropped are removed. The site shows the catalog's
         title, credits, description and prerequisites over the listings' (the API merges them).
-        Kept in MongoDB, not DynamoDB: GMU has over ten thousand courses, and the DynamoDB
+        Keys carry the school ("unc:COMP", "unc:COMP110"; GMU's stay bare: schools.school_code).
+        Kept in MongoDB, not DynamoDB: a school has thousands of courses, and the DynamoDB
         table's small provisioned capacity is meant for the syllabi."""
-        dept, now = department["code"], datetime.now(timezone.utc).isoformat()
+        dept, now = school_code(school, department["code"]), datetime.now(timezone.utc).isoformat()
         catalog = self.db["courses"]
         catalog.create_index("dept")
+        catalog.create_index("school")
+        codes = [school_code(school, c["code"]) for c in courses]
         writes = [
             UpdateOne(
-                {"_id": c["code"]},
-                {"$set": {"dept": dept, "title": c["title"], "credits": c["credits"],
+                {"_id": code},
+                {"$set": {"school": school, "dept": dept, "title": c["title"], "credits": c["credits"],
                           "description": c["description"], "prereqs": c["prereqs"], "updatedAt": now}},
                 upsert=True,
             )
-            for c in courses
+            for code, c in zip(codes, courses)
         ]
         if writes:
             catalog.bulk_write(writes, ordered=False)
-        catalog.delete_many({"dept": dept, "_id": {"$nin": [c["code"] for c in courses]}})
+        catalog.delete_many({"dept": dept, "_id": {"$nin": codes}})
         self.db["departments"].update_one(
             {"_id": dept},
-            {"$set": {"name": department["name"], "courses": len(courses), "updatedAt": now}},
+            {"$set": {"school": school, "name": department["name"], "courses": len(courses), "updatedAt": now}},
             upsert=True,
         )
         return len(courses)
@@ -157,13 +170,17 @@ class Store:
         codes = {o["code"] for offerings in self.offerings_by_file().values() for o in offerings}
         counts = defaultdict(int)
         for code in codes:
-            counts[re.match(r"[A-Z]+", code).group(0)] += 1
+            counts[re.match(r"(?:[a-z]+:)?[A-Z]+", code).group(0)] += 1
         departments = self.db["departments"]
         departments.update_many({"_id": {"$nin": sorted(counts)}}, {"$set": {"withSyllabi": 0}})
         for dept, count in counts.items():
             # A department missing from the catalog still shows up, named by its code.
+            school, _, bare = dept.rpartition(":")
             departments.update_one(
-                {"_id": dept}, {"$set": {"withSyllabi": count}, "$setOnInsert": {"name": dept, "courses": 0}}, upsert=True
+                {"_id": dept},
+                {"$set": {"withSyllabi": count},
+                 "$setOnInsert": {"school": school or DEFAULT_SCHOOL, "name": bare, "courses": 0}},
+                upsert=True,
             )
         return len(counts)
 

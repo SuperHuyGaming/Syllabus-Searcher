@@ -27,14 +27,16 @@ import SyllabusButtons from '../components/SyllabusButtons';
 import SyllabusSummary from '../components/SyllabusSummary';
 import { hasRollup, hasSummary } from '../lib/summary';
 import { groupByTerm, instructorsOf } from '../lib/terms';
-import { deptOf } from '../lib/courses';
-import { professorSlug } from '../lib/professors';
+import { DEFAULT_SCHOOL, deptOf, deptPath, displayCourse, schoolOf, withoutSchool } from '../lib/courses';
+import { useSchool } from '../components/School';
+import { professorPath, professorSlug } from '../lib/professors';
 
 const ALL = 'all';
 const PLACEHOLDER = /^(staff|all|all instructors|all professors|tba)$/i;
 
 export default function Course() {
   const { code } = useParams();
+  const { school } = useSchool();
   const { data: course, isPending, error } = useQuery({ queryKey: ['course', code], queryFn: () => api.course(code) });
   const [term, setTerm] = useState(ALL);
   const [instructor, setInstructor] = useState(ALL);
@@ -64,10 +66,11 @@ export default function Course() {
 
   return (
     <>
-      <Button component={RouterLink} to={`/?dept=${deptOf(course.code)}`} startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
-        All {deptOf(course.code)} courses
+      <Button component={RouterLink} to={deptPath(deptOf(course.code))} startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
+        All {withoutSchool(deptOf(course.code))} courses
       </Button>
       <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
+        {schoolOf(course.code) !== DEFAULT_SCHOOL && `${school.short} `}
         {course.display}
       </Typography>
       <Typography variant="h6" component="p" color="text.secondary" sx={{ mb: 2 }}>
@@ -200,6 +203,7 @@ function CourseRollup({ display, record }) {
 }
 
 function OfferingCard({ offering: o }) {
+  const { school } = useSchool();
   const [open, setOpen] = useState(false);
   const summarized = hasSummary(o.summary?.summary);
   return (
@@ -213,7 +217,7 @@ function OfferingCard({ offering: o }) {
                 {PLACEHOLDER.test(name) ? (
                   name
                 ) : (
-                  <Link component={RouterLink} to={`/professors/${professorSlug(name)}`} color="inherit">
+                  <Link component={RouterLink} to={professorPath(professorSlug(name), school.key)} color="inherit">
                     {name}
                   </Link>
                 )}
@@ -254,7 +258,7 @@ function UploadPrompt({ code, first }) {
       severity="success"
       variant="outlined"
       action={
-        <Button component={RouterLink} to={`/upload?course=${encodeURIComponent(code)}`} color="inherit">
+        <Button component={RouterLink} to={`/upload?${new URLSearchParams({ course: displayCourse(code), ...(schoolOf(code) !== DEFAULT_SCHOOL && { school: schoolOf(code) }) })}`} color="inherit">
           Upload
         </Button>
       }

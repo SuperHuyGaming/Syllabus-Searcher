@@ -1,24 +1,25 @@
 // Validates the course/term/section/professor fields shared by student uploads
 // and admin edits, so both accept and normalize the same values.
 const { HttpError } = require('./http');
-const { parseTerm, normalizeCourse } = require('./terms');
+const { parseTerm, normalizeCourse, deptOf, schoolOf, withoutSchool } = require('./terms');
 
 const SECTION = /^[A-Za-z0-9 ,/-]{1,20}$/;
 const INSTRUCTOR = /^[\p{L} .,'-]{2,80}$/u;
 
-function parseCourse(input) {
-  const code = normalizeCourse(input);
+// `school` is the school to read a bare code for ("COMP 110" at unc); a typed "unc:" wins.
+function parseCourse(input, school) {
+  const code = normalizeCourse(input, school);
   if (!code) throw new HttpError(400, 'Course code should look like "CS 310"');
   return code;
 }
 
-const deptOf = (code) => code.match(/^[A-Z]+/)[0];
-
-// A new syllabus must be for a GMU department (repos/departments.js), so a typo
-// like "CD 310" doesn't start a department of its own.
+// A new syllabus must be for a department in its school's catalog (repos/departments.js),
+// so a typo like "CD 310" doesn't start a department of its own.
 async function requireDepartment(departments, code) {
   const dept = deptOf(code);
-  if (!(await departments.exists(dept))) throw new HttpError(400, `${dept} isn't a GMU department. Check the course code.`);
+  if (!(await departments.exists(dept))) {
+    throw new HttpError(400, `${withoutSchool(dept)} isn't a department at ${await departments.schoolName(schoolOf(code))}. Check the course code.`);
+  }
   return dept;
 }
 
@@ -50,7 +51,7 @@ function parseInstructors(input) {
 
 function parseDetails(input) {
   return {
-    code: parseCourse(input.course),
+    code: parseCourse(input.course, input.school),
     term: parseTermInput(input.term),
     section: parseSection(input.section),
     instructor: parseInstructor(input.instructor),

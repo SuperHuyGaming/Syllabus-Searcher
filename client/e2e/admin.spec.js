@@ -43,13 +43,13 @@ async function signIn(page) {
   await page.route('https://e2e.supabase.co/**', (route) => route.fulfill({ status: 200, body: '{}' }));
 }
 
-async function mockAdminApi(page, onFile, { html = false, ai, onAiCheck, virusScan } = {}) {
+async function mockAdminApi(page, onFile, { html = false, ai, onAiCheck, virusScan, courseCode = 'CS310' } = {}) {
   await page.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/admin/uploads') {
       const upload = {
         id: UPLOAD_ID,
-        course_code: 'CS310',
+        course_code: courseCode,
         term_key: '2026-3',
         section: '001',
         instructor: 'Russell, K',
@@ -310,11 +310,11 @@ test('admin merges two spellings of a professor after a preview', async ({ page 
   await page.getByRole('button', { name: 'Preview merge' }).click();
   await expect(page.getByText('2 syllabi will change:')).toBeVisible();
   await expect(page.getByText('CS 580 Spring 2025, section 002: Gonzalez Hernandez, A → González, Ana')).toBeVisible();
-  expect(sent).toEqual([{ from: 'Gonzalez Hernandez, A', into: 'González, Ana' }]);
+  expect(sent).toEqual([{ from: 'Gonzalez Hernandez, A', into: 'González, Ana', school: 'gmu' }]);
 
   await page.getByRole('button', { name: 'Merge', exact: true }).click();
   await expect(page.getByText('Merged "Gonzalez Hernandez, A" into "González, Ana" on 2 syllabi.')).toBeVisible();
-  expect(sent[1]).toEqual({ from: 'Gonzalez Hernandez, A', into: 'González, Ana', apply: true });
+  expect(sent[1]).toEqual({ from: 'Gonzalez Hernandez, A', into: 'González, Ana', apply: true, school: 'gmu' });
   await expect(page.getByRole('button', { name: /→ González, Ana/ })).toHaveCount(0);
 });
 
@@ -354,4 +354,12 @@ test('Site data says how to set up refresh when the token is missing', async ({ 
   await page.getByRole('tab', { name: 'Site data' }).click();
   await expect(page.getByText(/Not set up on this site: add the GH_DISPATCH_TOKEN secret/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Refresh now' })).toBeDisabled();
+});
+
+test("an upload for another school shows its school, and the course field reads codes there", async ({ page }) => {
+  await signIn(page);
+  await mockAdminApi(page, null, { courseCode: 'unc:COMP110' });
+  await page.goto('/admin');
+  await expect(page.getByText(/Student entered: UNC COMP 110/)).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Course code' })).toHaveValue('COMP 110');
 });

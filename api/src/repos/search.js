@@ -1,6 +1,7 @@
 // Full-text search over syllabus contents. The scraper fills the "syllabus_text"
 // collection and its text index (scraper/syllabus_scraper/store.py: index_text).
 const { getDb } = require('./files');
+const { DEFAULT_SCHOOL } = require('../lib/terms');
 
 const RESULT_LIMIT = 20;
 
@@ -39,14 +40,19 @@ function snippet(text, words, width = 240) {
   return `${start > 0 ? '…' : ''}${cut.slice(start > 0 ? cut.indexOf(' ') + 1 : 0)}${start + width < text.length ? '…' : ''}`;
 }
 
+// Only one school's syllabi: GMU codes have no "school:" prefix (lib/terms.js).
+function schoolFilter(school) {
+  return school === DEFAULT_SCHOOL ? { codes: { $not: /:/ } } : { codes: { $regex: `^${escape(school)}:` } };
+}
+
 function createSearch({ db } = {}) {
   const database = () => (db ? Promise.resolve(db) : getDb());
 
   return {
-    async search(query) {
+    async search(query, school = DEFAULT_SCHOOL) {
       const collection = (await database()).collection('syllabus_text');
       const docs = await collection
-        .find({ $text: { $search: query } }, { projection: { score: { $meta: 'textScore' } } })
+        .find({ $text: { $search: query }, ...schoolFilter(school) }, { projection: { score: { $meta: 'textScore' } } })
         .sort({ score: { $meta: 'textScore' } })
         .limit(RESULT_LIMIT)
         .toArray();
@@ -86,4 +92,4 @@ function createSearch({ db } = {}) {
   };
 }
 
-module.exports = { createSearch, snippet, terms };
+module.exports = { createSearch, snippet, terms, schoolFilter };
