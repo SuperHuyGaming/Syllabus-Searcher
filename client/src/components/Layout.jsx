@@ -23,17 +23,28 @@ function Page() {
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" elevation={0}>
         <Toolbar sx={{ gap: 1 }}>
-          <MenuBookIcon aria-hidden />
+          {/* On a phone the name gives its room to the school picker; the book icon still links home. */}
           <Typography
             component={RouterLink}
             to="/"
             variant="h6"
             noWrap
-            sx={{ flexGrow: 1, color: 'inherit', textDecoration: 'none', fontWeight: 700, fontSize: { xs: 16, sm: 20 } }}
+            aria-label="Syllabus Searcher home"
+            sx={{
+              flexGrow: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              minWidth: 0,
+              color: 'inherit',
+              textDecoration: 'none',
+              fontWeight: 700,
+              fontSize: 20,
+            }}
           >
-            Syllabus
+            <MenuBookIcon aria-hidden />
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-              {' '}Searcher
+              Syllabus Searcher
             </Box>
           </Typography>
           <SchoolPicker />
