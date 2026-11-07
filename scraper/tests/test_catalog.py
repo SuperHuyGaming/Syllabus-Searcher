@@ -86,3 +86,16 @@ def test_odu_reads_xref_codes_and_credit_hours_in_parentheses():
     assert courses[0]["title"] == "Information Literacy for Former Engineering Majors"
     assert courses[0]["credits"] == "1"
     assert courses[0]["description"].startswith("The objective of this course")
+
+
+def test_department_names_in_capitals_read_like_the_others():
+    page = '<div id="atozindex"><a href="/courses/comp/">COMPUTER SCIENCE (COMP)</a>' \
+        '<a href="/courses/aaad/">AFRICAN, AFRICAN AMERICAN, AND DIASPORA STUDIES (AAAD)</a>' \
+        '<a href="/courses/aaas/">AFRICAN-AMERICAN STUDIES (AAAS)</a>'         '<a href="/courses/cs/">Computer Science and ICT (CS)</a></div>'
+    names = [d["name"] for d in parse_departments(page)]
+    assert names == [
+        "Computer Science",
+        "African, African American, and Diaspora Studies",
+        "African-American Studies",
+        "Computer Science and ICT",
+    ]
