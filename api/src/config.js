@@ -42,7 +42,8 @@ module.exports = {
   ipHashSalt: process.env.IP_HASH_SALT || '',
   uploadsPerHour: Number(process.env.UPLOADS_PER_HOUR || 5),
 
-  // Departments the site covers. CS only for now.
+  // Departments always covered, even before the scraper loads GMU's catalog of every
+  // department into MongoDB (repos/departments.js).
   departments: ['CS'],
   // Lambda responses cap at 6 MB and base64 adds a third, so files stay under 4 MB.
   maxFileBytes: 4 * 1024 * 1024,

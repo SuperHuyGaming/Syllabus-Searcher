@@ -1,7 +1,9 @@
-// Single-table DynamoDB layout:
+// Single-table DynamoDB layout. GMU's full catalog (every course, with or without a
+// syllabus) is in MongoDB instead (repos/departments.js); this table has the courses
+// with syllabi. CS catalog entries from before that move are still here (inCatalog).
 //   PK=DEPT#CS        SK=COURSE#CS310                     -> course list for search (hasSyllabi, inCatalog)
 //   PK=COURSE#CS310   SK=META                             -> title, plus credits/description/prereqs
-//                                                            for courses in the official catalog
+//                                                            for older CS entries from the catalog
 //   PK=COURSE#CS310   SK=TERM#2022-3#SEC#001#<fileId>     -> one syllabus offering
 //   PK=RATE#<ipHash>  SK=<hour>                           -> upload rate limit (TTL)
 //   PK=CURATED        SK=<sourceUrl>                      -> scraped file an admin edited or deleted;
@@ -56,15 +58,17 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
   const queryAll = (params) => readAll(QueryCommand, params);
 
   // Marks a course as having syllabi and sets its title, on both the list entry and the course record.
+  // Returns true if the course had no syllabi before.
   async function touchCourse({ dept, code, title, keepTitle }) {
     const titleExpr = keepTitle ? 'title = if_not_exists(title, :title)' : 'title = :title';
     const now = new Date().toISOString();
-    await db.send(
+    const { Attributes: before } = await db.send(
       new UpdateCommand({
         TableName: tableName,
         Key: { PK: `DEPT#${dept}`, SK: `COURSE#${code}` },
         UpdateExpression: `SET code = :code, ${titleExpr}, hasSyllabi = :yes, updatedAt = :now`,
         ExpressionAttributeValues: { ':code': code, ':title': title, ':yes': true, ':now': now },
+        ReturnValues: 'UPDATED_OLD',
       })
     );
     await db.send(
@@ -75,9 +79,32 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
         ExpressionAttributeValues: { ':code': code, ':title': title, ':now': now },
       })
     );
+    // Old entries have no hasSyllabi flag, but they all had syllabi.
+    return !before || before.hasSyllabi === false;
   }
 
   return {
+    // Which of these course codes have syllabi (a Set), for course search results.
+    async coursesWithSyllabi(codes) {
+      const keys = [...new Set(codes)].map((code) => ({ PK: `DEPT#${code.match(/^[A-Z]+/)[0]}`, SK: `COURSE#${code}` }));
+      const found = new Set();
+      for (let i = 0; i < keys.length; i += 100) {
+        let batch = keys.slice(i, i + 100);
+        for (let tries = 0; batch?.length && tries < 5; tries += 1) {
+          const res = await db.send(
+            new BatchGetCommand({
+              RequestItems: { [tableName]: { Keys: batch, ProjectionExpression: 'code, hasSyllabi' } },
+            })
+          );
+          for (const item of res.Responses?.[tableName] || []) {
+            if (item.hasSyllabi !== false) found.add(item.code);
+          }
+          batch = res.UnprocessedKeys?.[tableName]?.Keys;
+        }
+      }
+      return found;
+    },
+
     async listCourses(dept) {
       const items = await queryAll({
         KeyConditionExpression: 'PK = :pk',
@@ -153,9 +180,10 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
 
     // Writes the course entries and the offering. Course entries are updated, not replaced,
     // so catalog details survive; an existing title (the catalog's) is kept.
+    // Returns { firstSyllabus: true } if the course had no syllabi before.
     async putOffering({ dept, code, title, term, section, instructors, fileId, contentType, source, sourceUrl }) {
       const now = new Date().toISOString();
-      await touchCourse({ dept, code, title, keepTitle: true });
+      const firstSyllabus = await touchCourse({ dept, code, title, keepTitle: true });
       await db.send(
         new PutCommand({
           TableName: tableName,
@@ -176,6 +204,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
           },
         })
       );
+      return { firstSyllabus };
     },
 
     async getOffering(code, id) {

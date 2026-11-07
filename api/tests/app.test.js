@@ -57,7 +57,8 @@ function fakes() {
         code === 'CS310' ? { code, title: 'Data Structures', offerings: [{ termKey: '2024-3' }] } : null
       ),
       getCourseMeta: jest.fn().mockResolvedValue({ title: 'Data Structures' }),
-      putOffering: jest.fn().mockResolvedValue(),
+      putOffering: jest.fn().mockResolvedValue({ firstSyllabus: false }),
+      coursesWithSyllabi: jest.fn(async (codes) => new Set(codes.filter((c) => c === 'CS310'))),
       getOffering: jest.fn(async (code, id) => (code === 'CS580' && id === OFFERING.SK ? { ...OFFERING } : null)),
       offeringsForFile: jest.fn().mockResolvedValue([]),
       updateOffering: jest.fn(async (old, next) => ({ ...old, PK: `COURSE#${next.code}`, SK: 'TERM#new', code: next.code })),
@@ -71,6 +72,33 @@ function fakes() {
       getStatus: jest.fn().mockResolvedValue({ scrapedAt: '2026-11-02T09:40:00.123456+00:00', uploadedAt: '2026-11-01T18:00:00.000Z' }),
       markUploaded: jest.fn().mockResolvedValue(),
       ping: jest.fn().mockResolvedValue(),
+    },
+    // GMU's catalog (MongoDB): CS and MATH, plus SWE with nothing loaded yet.
+    departments: {
+      list: jest.fn().mockResolvedValue([
+        { code: 'CS', name: 'Computer Science', courses: 3, withSyllabi: 2 },
+        { code: 'MATH', name: 'Mathematics', courses: 1, withSyllabi: 0 },
+      ]),
+      exists: jest.fn(async (dept) => ['CS', 'MATH', 'SWE'].includes(dept)),
+      get: jest.fn(async (dept) => ({ CS: { code: 'CS', name: 'Computer Science' }, MATH: { code: 'MATH', name: 'Mathematics' } })[dept] || null),
+      courses: jest.fn(async (dept) =>
+        dept === 'CS'
+          ? [
+              { code: 'CS310', display: 'CS 310', title: 'Data Structures' },
+              { code: 'CS100', display: 'CS 100', title: 'Principles of Computing' },
+            ]
+          : [{ code: 'MATH113', display: 'MATH 113', title: 'Analytic Geometry and Calculus I' }]
+      ),
+      course: jest.fn(async (code) =>
+        code === 'MATH113'
+          ? { code, dept: 'MATH', display: 'MATH 113', title: 'Analytic Geometry and Calculus I', credits: '4', description: 'Limits.', prereqs: '' }
+          : null
+      ),
+      search: jest.fn().mockResolvedValue([
+        { code: 'CS310', dept: 'CS', display: 'CS 310', title: 'Data Structures' },
+        { code: 'MATH113', dept: 'MATH', display: 'MATH 113', title: 'Analytic Geometry and Calculus I' },
+      ]),
+      addCourseWithSyllabi: jest.fn().mockResolvedValue(),
     },
     files: {
       save: jest.fn().mockResolvedValue(FILE_ID),
@@ -119,16 +147,50 @@ describe('catalog routes', () => {
     expect(parse(await createApp(deps)(event('GET', '/api/status'))).lastUpdated).toBeNull();
   });
 
-  test('lists CS courses sorted by code', async () => {
+  test('lists CS courses by default: the catalog plus syllabus courses, sorted by code', async () => {
     const app = createApp(fakes());
     const res = await app(event('GET', '/api/courses'));
     expect(res.statusCode).toBe(200);
-    expect(parse(res).courses.map((c) => c.code)).toEqual(['CS310', 'CS483']);
+    const body = parse(res);
+    expect(body.name).toBe('Computer Science');
+    expect(body.courses.map((c) => c.code)).toEqual(['CS100', 'CS310', 'CS483']);
+    expect(body.courses.find((c) => c.code === 'CS100').hasSyllabi).toBe(false);
     expect(res.headers['Cache-Control']).toMatch(/s-maxage/);
   });
 
-  test('rejects other departments for now', async () => {
-    const res = await createApp(fakes())(event('GET', '/api/courses', { query: { dept: 'MATH' } }));
+  test('lists another department from the catalog', async () => {
+    const deps = fakes();
+    deps.catalog.listCourses.mockResolvedValue([]);
+    const res = await createApp(deps)(event('GET', '/api/courses', { query: { dept: 'math' } }));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res)).toMatchObject({ dept: 'MATH', name: 'Mathematics', courses: [{ code: 'MATH113', hasSyllabi: false }] });
+    expect(deps.catalog.listCourses).toHaveBeenCalledWith('MATH');
+  });
+
+  test('404s for a department GMU does not have', async () => {
+    const res = await createApp(fakes())(event('GET', '/api/courses', { query: { dept: 'XYZ' } }));
+    expect(res.statusCode).toBe(404);
+  });
+
+  test('lists every department', async () => {
+    const res = await createApp(fakes())(event('GET', '/api/departments'));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res).departments.map((d) => d.code)).toEqual(['CS', 'MATH']);
+  });
+
+  test('finds courses in any department and marks the ones with syllabi', async () => {
+    const deps = fakes();
+    const res = await createApp(deps)(event('GET', '/api/courses', { query: { q: ' calc ' } }));
+    expect(res.statusCode).toBe(200);
+    expect(deps.departments.search).toHaveBeenCalledWith('calc');
+    expect(parse(res).courses.map((c) => [c.code, c.hasSyllabi])).toEqual([
+      ['CS310', true],
+      ['MATH113', false],
+    ]);
+  });
+
+  test('course search needs two characters', async () => {
+    const res = await createApp(fakes())(event('GET', '/api/courses', { query: { q: 'c' } }));
     expect(res.statusCode).toBe(400);
   });
 
@@ -137,6 +199,12 @@ describe('catalog routes', () => {
     const res = await createApp(deps)(event('GET', '/api/courses/CS%20310'));
     expect(res.statusCode).toBe(200);
     expect(deps.catalog.getCourse).toHaveBeenCalledWith('CS310');
+  });
+
+  test('shows a catalog course that has no syllabi yet', async () => {
+    const res = await createApp(fakes())(event('GET', '/api/courses/MATH113'));
+    expect(res.statusCode).toBe(200);
+    expect(parse(res)).toMatchObject({ code: 'MATH113', title: 'Analytic Geometry and Calculus I', credits: '4', offerings: [] });
   });
 
   test('404s for unknown courses', async () => {
@@ -294,6 +362,15 @@ describe('uploads', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  test('takes uploads for any GMU department, not made-up ones', async () => {
+    const deps = fakes();
+    const math = await createApp(deps)(event('POST', '/api/uploads', { query: { ...query, course: 'MATH 113' }, body: realPdf }));
+    expect(math.statusCode).toBe(201);
+    const made = await createApp(deps)(event('POST', '/api/uploads', { query: { ...query, course: 'XYZ 113' }, body: realPdf }));
+    expect(made.statusCode).toBe(400);
+    expect(parse(made).error).toMatch(/XYZ isn't a GMU department/);
+  });
+
   test('rate limits by IP', async () => {
     const deps = fakes();
     deps.catalog.hitRateLimit.mockResolvedValue(false);
@@ -416,7 +493,7 @@ describe('admin', () => {
   test('approving rejects invalid corrections before publishing', async () => {
     const deps = fakes();
     const res = await createApp(deps)(
-      event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good'), body: '{"course":"MATH 213"}' })
+      event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good'), body: '{"course":"XYZ 213"}' })
     );
     expect(res.statusCode).toBe(400);
     expect(deps.files.move).not.toHaveBeenCalled();
@@ -428,6 +505,19 @@ describe('admin', () => {
     const res = await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good') }));
     expect(res.statusCode).toBe(400);
     expect(deps.files.move).not.toHaveBeenCalled();
+  });
+
+  test("a catalog course's first syllabus takes the catalog title and counts for its department", async () => {
+    const deps = fakes();
+    deps.catalog.getCourseMeta.mockResolvedValue(null);
+    deps.catalog.putOffering.mockResolvedValue({ firstSyllabus: true });
+    const body = JSON.stringify({ course: 'MATH 113' });
+    const res = await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good'), body }));
+    expect(res.statusCode).toBe(200);
+    expect(deps.catalog.putOffering).toHaveBeenCalledWith(
+      expect.objectContaining({ dept: 'MATH', code: 'MATH113', title: 'Analytic Geometry and Calculus I' })
+    );
+    expect(deps.departments.addCourseWithSyllabi).toHaveBeenCalledWith('MATH');
   });
 
   test('approving an HTML upload keeps its type', async () => {

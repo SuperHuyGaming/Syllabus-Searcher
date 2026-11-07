@@ -2,16 +2,28 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Autocomplete, Box, Chip, Stack, TextField, Typography } from '@mui/material';
 import { api } from '../api';
-import { displayCourse, normalizeCourse } from '../lib/courses';
+import { deptOfText, displayCourse, normalizeCourse } from '../lib/courses';
 import { instructorsOf } from '../lib/terms';
 
-// The course list, keyed by code, plus what the typed text resolves to.
+const FIVE_MINUTES = 5 * 60 * 1000;
+
+// The courses of the department being typed ("MATH 2" loads MATH), plus what the
+// typed text resolves to. `loaded` is true once a missing course is really missing.
 export function useCourseLookup(text) {
-  const { data } = useQuery({ queryKey: ['courses'], queryFn: api.courses, staleTime: 5 * 60 * 1000 });
-  const courses = useMemo(() => data?.courses || [], [data]);
+  const { data: depts } = useQuery({ queryKey: ['departments'], queryFn: api.departments, staleTime: FIVE_MINUTES });
+  const typed = deptOfText(text);
+  // CS is always on the site, even before the catalog of other departments is loaded.
+  const dept = typed && (typed === 'CS' || depts?.departments.some((d) => d.code === typed)) ? typed : null;
+  const { data } = useQuery({
+    queryKey: ['courses', dept],
+    queryFn: () => api.courses(dept),
+    enabled: Boolean(dept),
+    staleTime: FIVE_MINUTES,
+  });
+  const courses = useMemo(() => (dept && data?.courses) || [], [dept, data]);
   const code = normalizeCourse(text);
   const known = code ? courses.find((c) => c.code === code) : null;
-  return { courses, code, known, loaded: Boolean(data) };
+  return { courses, code, known, loaded: dept ? Boolean(data) : Boolean(depts) };
 }
 
 // Course code input that suggests known courses and shows the title of the one typed,
@@ -19,7 +31,7 @@ export function useCourseLookup(text) {
 export function CourseField({ value, onChange, label = 'Course code', required, size }) {
   const { courses, code, known, loaded } = useCourseLookup(value);
 
-  let helperText = 'Pick from the list or type a code like CS 310';
+  let helperText = 'Type a department and number, like CS 310 or MATH 113';
   if (known) helperText = `${known.display} · ${known.title}`;
   else if (code && loaded) helperText = `${displayCourse(code)} isn't on the site yet. Double-check the code.`;
 

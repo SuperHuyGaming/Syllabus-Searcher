@@ -3,8 +3,10 @@
 // Used when a student uploads and when an admin runs the check again.
 const { displayCourse } = require('./terms');
 
-async function aiReview({ catalog, buffer, contentType, details, readText, checkUpload }) {
+async function aiReview({ catalog, departments, buffer, contentType, details, readText, checkUpload }) {
   const course = await catalog.getCourse(details.code);
+  // Courses without syllabi yet are only in the catalog, which still has their title.
+  const official = !course && departments ? await departments.course(details.code) : null;
   const duplicates = (course?.offerings || [])
     .filter((o) => o.termKey === details.term.key && String(o.section).trim().toLowerCase() === details.section.toLowerCase())
     .map(({ section, instructors }) => ({ section, instructors }));
@@ -20,7 +22,7 @@ async function aiReview({ catalog, buffer, contentType, details, readText, check
     text,
     {
       course: displayCourse(details.code),
-      title: course?.title,
+      title: course?.title || official?.title,
       term: details.term.label,
       section: details.section,
       instructor: details.instructor,

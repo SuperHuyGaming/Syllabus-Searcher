@@ -28,6 +28,9 @@ class FakeStore:
     def mark_scraped(self):
         self.scraped += 1
 
+    def count_syllabi(self):
+        return 0
+
 
 def test_mark_scraped_only_sets_the_scrape_time():
     store = Store.__new__(Store)  # skip the database connections
@@ -49,3 +52,29 @@ def test_a_full_scrape_is_recorded_but_index_only_is_not(monkeypatch):
     assert fake.scraped == 0
     assert scrape.main(["--no-catalog", "--no-filenames"]) == 0
     assert fake.scraped == 1
+
+
+class FakeCollection:
+    def __init__(self):
+        self.calls = []
+
+    def update_many(self, *args):
+        self.calls.append(("many", *args))
+
+    def update_one(self, *args, **kwargs):
+        self.calls.append(("one", *args))
+
+
+def test_count_syllabi_counts_courses_not_files_per_department():
+    store = Store.__new__(Store)
+    departments = FakeCollection()
+    store.db = {"departments": departments}
+    store.offerings_by_file = lambda: {
+        "f1": [{"code": "CS310"}, {"code": "SWE310"}],
+        "f2": [{"code": "CS310"}],
+        "f3": [{"code": "CS483"}],
+    }
+    assert store.count_syllabi() == 2
+    assert departments.calls[0] == ("many", {"_id": {"$nin": ["CS", "SWE"]}}, {"$set": {"withSyllabi": 0}})
+    counts = {call[1]["_id"]: call[2]["$set"]["withSyllabi"] for call in departments.calls[1:]}
+    assert counts == {"CS": 2, "SWE": 1}

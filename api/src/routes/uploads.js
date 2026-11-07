@@ -2,7 +2,7 @@ const crypto = require('node:crypto');
 const config = require('../config');
 const { json, HttpError, bodyBuffer, clientIp } = require('../lib/http');
 const { analyzeSyllabus } = require('../lib/azure');
-const { parseDetails } = require('../lib/details');
+const { parseDetails, requireDepartment } = require('../lib/details');
 const { sanitizePdf, PdfRejected } = require('../lib/pdfcheck');
 const { checkUpload: aiCheck } = require('../lib/ai');
 const { fileText } = require('../lib/text');
@@ -18,13 +18,14 @@ function fileKind(buffer) {
   return html ? { type: 'text/html; charset=utf-8', ext: 'html' } : null;
 }
 
-module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus, checkUpload = aiCheck, readText = fileText, virusScan = scanUpload }) => [
+module.exports = ({ catalog, departments, files, uploads, analyze = analyzeSyllabus, checkUpload = aiCheck, readText = fileText, virusScan = scanUpload }) => [
   {
     // The PDF is the raw request body; course details ride in the query string.
     method: 'POST',
     path: /^\/api\/uploads$/,
     async handler({ event, query }) {
       const details = parseDetails(query);
+      await requireDepartment(departments, details.code);
 
       const file = bodyBuffer(event);
       if (file.length === 0) throw new HttpError(400, 'Attach a PDF or HTML file');
@@ -66,7 +67,7 @@ module.exports = ({ catalog, files, uploads, analyze = analyzeSyllabus, checkUpl
       // neither can fail the upload: the admin reviews by hand without them.
       const [found, ai] = await Promise.all([
         kind.ext === 'pdf' ? analyze(stored) : null,
-        aiReview({ catalog, buffer: stored, contentType: kind.type, details, readText, checkUpload }).catch((err) => {
+        aiReview({ catalog, departments, buffer: stored, contentType: kind.type, details, readText, checkUpload }).catch((err) => {
           console.error('AI check failed', err);
           return { unavailable: 'The AI check failed.', checkedAt: new Date().toISOString() };
         }),
