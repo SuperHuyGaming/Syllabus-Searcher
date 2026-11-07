@@ -1,8 +1,8 @@
 # GMU Syllabus Searcher
 
-Look up a GMU Computer Science course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed.
+Look up any GMU course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed. Most syllabi so far are Computer Science, from the CS department's old syllabus page; other departments fill in through student uploads.
 
-- **By course**: every CS course in GMU's official catalog, with credits, description and prerequisites. Search a code or title, then filter syllabi by term and professor. Courses with no syllabus yet ask students to upload one.
+- **By course**: every course in GMU's official catalog (about 170 departments), with credits, description and prerequisites. Search a code or title across departments, or pick a department on the home page (`/?dept=MATH`), then filter syllabi by term and professor. Courses with no syllabus yet ask students to upload one.
 - **By professor**: search by first or last name and see every course and term they have a syllabus for. Full names are read from the syllabi when the department listing only gives an initial.
 - **Inside syllabi**: full-text search for a language, textbook or policy (`Python`, `"late policy"`), with highlighted snippets.
 - **Uploads**: students can add missing syllabi as a PDF or, when the professor posted it as a web page, an HTML file; an admin approves them before they show up. Uploaded PDFs are rebuilt page by page with scripts, auto-run actions and attachments removed; encrypted or unreadable files are refused. The admin reviews each file on the page (PDFs drawn with pdf.js, with the page text alongside), so it never opens in a desktop reader. Every upload is virus-scanned with ClamAV: locally a ClamAV container scans it on arrival and refuses infected files; on the deployed sites the **Virus scan** workflow (`api/scripts/virus-scan.js`) scans pending uploads every two hours. The admin card shows the result, and a flagged upload can only be rejected.
@@ -15,7 +15,8 @@ Look up a GMU Computer Science course, see which professors taught it each term 
 |---|---|---|---|
 | Website | React, Vite, MUI, React Query | nginx container | S3 + CloudFront Free plan |
 | API | Node.js Lambda handler | Node container (`scripts/local.js`) | AWS Lambda behind CloudFront |
-| Course catalog | DynamoDB single table | DynamoDB Local container | DynamoDB, provisioned 5/5 |
+| Syllabus offerings | DynamoDB single table | DynamoDB Local container | DynamoDB, provisioned 5/5 |
+| GMU course catalog | MongoDB collections `departments`, `courses` | Mongo container | MongoDB Atlas M0 |
 | Syllabus files + text search | MongoDB GridFS + text index | Mongo container | MongoDB Atlas M0 |
 | Upload queue + admin login | Supabase Postgres + Auth | Supabase free tier (cloud) | Supabase free tier |
 | PDF reading (optional) | Azure AI Document Intelligence | Azure F0 (cloud) | Azure F0 |
@@ -40,7 +41,7 @@ Or by hand:
 ```bash
 cp .env.example .env              # optional: add Supabase/Azure keys for uploads and /admin
 docker compose up -d --build      # http://localhost:8080
-docker compose run --rm scraper   # loads GMU CS syllabi since Fall 2022 (takes a few minutes)
+docker compose run --rm scraper   # loads GMU CS syllabi since Fall 2022 and every course in the catalog (takes a few minutes)
 ```
 
 Useful commands:
@@ -81,7 +82,9 @@ Courses with two or more summarized syllabi also get an "Across all syllabi" car
 
 ## Where the courses and syllabi come from
 
-The course list comes from GMU's official catalog, `catalog.gmu.edu/courses/cs/` (title, credits, description, prerequisites). Every scrape reloads it, or run just that step with `docker compose run --rm scraper --catalog-only`.
+The course list comes from GMU's official catalog: the A-Z list at `catalog.gmu.edu/courses/` gives every department, and each department's page (e.g. `catalog.gmu.edu/courses/cs/`) its courses with title, credits, description and prerequisites. Every scrape reloads it into MongoDB (`departments`, `courses`), or run just that step with `docker compose run --rm scraper --catalog-only` (add `--departments CS,MATH` for a few). It lives in MongoDB rather than DynamoDB because GMU has over ten thousand courses and the DynamoDB table's 5 write units would take hours to load them. The API merges the catalog with the DynamoDB courses that have syllabi.
+
+Only the CS department ever published its syllabi, so every other department's syllabi come from uploads. The CS listing also carries cross-listed SWE and ISA courses, which are kept.
 
 The CS department used to list syllabi at `cs.gmu.edu/syllabi/`, a table of course, section, title and instructor linking to files under `/media/syllabi/<Term>/`. Those pages and files started returning 404 in late 2025, so the scraper falls back to the Internet Archive's copies.
 

@@ -1,4 +1,4 @@
-# Re-scrapes GMU CS syllabi into the cloud stores (DynamoDB + MongoDB Atlas) every week,
+# Re-scrapes GMU CS syllabi and the whole GMU course catalog into the cloud stores (DynamoDB + MongoDB Atlas) every week,
 # for both environments. Each environment skips quietly until its secrets exist.
 name: Scrape syllabi
 # Manual runs (and "Refresh now" on /admin) name the site, so the admin page can find its own run.

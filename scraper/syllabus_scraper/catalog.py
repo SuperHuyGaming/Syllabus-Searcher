@@ -1,12 +1,13 @@
-"""Reads every course in GMU's official catalog (catalog.gmu.edu), so the site lists
-all CS courses, not only the ones with a syllabus on file."""
+"""Reads every department and course in GMU's official catalog (catalog.gmu.edu), so the
+site lists every course, not only the ones with a syllabus on file."""
 
 import html
 import re
 
 from bs4 import BeautifulSoup
 
-CATALOG_URL = "https://catalog.gmu.edu/courses/{dept}/"
+INDEX_URL = "https://catalog.gmu.edu/courses/"
+CATALOG_URL = "https://catalog.gmu.edu/courses/{slug}/"
 
 
 def _text(node):
@@ -29,6 +30,20 @@ def _clean_prereqs(text):
                 return text  # the first "(" closes early, so it doesn't wrap everything
         text = text[1:-1].strip()
     return text
+
+
+def parse_departments(page):
+    """Returns one dict per subject on the catalog's A-Z page: code ("CS"), name, slug ("cs").
+    Codes are 2-4 letters, the same as course codes everywhere else on the site."""
+    soup = BeautifulSoup(page, "html.parser")
+    departments = {}
+    for link in soup.select("#atozindex a[href^='/courses/']"):
+        slug = link["href"].strip("/").split("/")[-1]
+        text = html.unescape(link.get_text()).replace("\u200b", "").replace("\xa0", " ")
+        match = re.match(r"(.+?)\s*\(([A-Z]{2,4})\)\s*$", text.strip())
+        if match and slug and match.group(2) not in departments:
+            departments[match.group(2)] = {"code": match.group(2), "name": match.group(1).strip(), "slug": slug}
+    return list(departments.values())
 
 
 def parse_catalog(page, dept="CS"):
@@ -68,7 +83,13 @@ def parse_catalog(page, dept="CS"):
     return courses
 
 
-def fetch_catalog(fetcher, dept="CS"):
+def fetch_departments(fetcher):
+    """Every subject in the catalog; [] if the A-Z page can't be reached."""
+    res = fetcher.get(INDEX_URL)
+    return parse_departments(res.text) if res else []
+
+
+def fetch_catalog(fetcher, dept="CS", slug=None):
     """Downloads and parses the catalog page for one department; [] if it can't be reached."""
-    res = fetcher.get(CATALOG_URL.format(dept=dept.lower()))
+    res = fetcher.get(CATALOG_URL.format(slug=slug or dept.lower()))
     return parse_catalog(res.text, dept) if res else []

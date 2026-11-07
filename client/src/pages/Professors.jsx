@@ -33,7 +33,7 @@ export default function Professors() {
         Professors
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 3 }}>
-        Every CS professor with a syllabus on file, and the courses they&apos;ve taught.
+        Every professor with a syllabus on file, and the courses they&apos;ve taught.
       </Typography>
 
       {/* Type a first or last name; pick a suggestion (click or Enter) to open that professor. */}

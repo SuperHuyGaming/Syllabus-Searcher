@@ -19,7 +19,10 @@ const post = (path, body, token) =>
 export const syllabusUrl = (fileId) => `/api/syllabi/${fileId}`;
 
 export const api = {
-  courses: () => json('/courses?dept=CS'),
+  departments: () => json('/departments'),
+  courses: (dept = 'CS') => json(`/courses?${new URLSearchParams({ dept })}`),
+  // Courses in any department whose code or title matches, e.g. "math 2" or "data struct".
+  findCourses: (q) => json(`/courses?${new URLSearchParams({ q })}`),
   course: (code) => json(`/courses/${encodeURIComponent(code)}`),
   professors: () => json('/professors'),
   status: () => json('/status'),

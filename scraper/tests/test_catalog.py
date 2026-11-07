@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from syllabus_scraper.catalog import parse_catalog
+from syllabus_scraper.catalog import parse_catalog, parse_departments
 
 PAGE = (Path(__file__).parent / "fixtures" / "catalog_cs.html").read_text(encoding="utf-8")
 
@@ -27,3 +27,15 @@ def test_prerequisites_are_plain_text_with_grades():
 
 def test_other_departments_are_ignored():
     assert parse_catalog(PAGE, dept="MATH") == []
+
+
+INDEX = (Path(__file__).parent / "fixtures" / "catalog_index.html").read_text(encoding="utf-8")
+
+
+def test_reads_each_department_once_from_the_a_to_z_list():
+    departments = parse_departments(INDEX)
+    assert [d["code"] for d in departments] == ["ACCT", "CS", "OSCM", "LAWG", "ISM"]
+    oscm = departments[2]
+    assert oscm["name"] == "Operations & Supply Chain Management"
+    assert oscm["slug"] == "operations--supply-chain-management"
+    assert departments[3]["name"] == "Law-Grad Law"

@@ -22,6 +22,33 @@ test('search matches course titles too', async ({ page }) => {
   await expect(page.getByRole('option')).toHaveText([/CS 483/]);
 });
 
+test('search finds courses in other departments', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Course code or name').fill('calculus');
+  await expect(page.getByRole('option')).toHaveText([/MATH 113.*no syllabi yet/]);
+});
+
+test('home lists CS by default and switches department from the picker', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /All Computer Science courses/ })).toContainText('2 of 3 have syllabi');
+
+  await page.getByLabel('Department').click();
+  await expect(page.getByRole('listbox')).toContainText(/Have syllabi.*No syllabi yet/);
+  await page.getByRole('option', { name: /Mathematics \(MATH\)/ }).click();
+
+  await expect(page).toHaveURL(/\/\?dept=MATH$/);
+  await expect(page.getByRole('heading', { name: /All Mathematics courses/ })).toContainText('0 of 1 have syllabi');
+  await page.getByRole('link', { name: /MATH 113/ }).click();
+  await expect(page).toHaveURL(/\/courses\/MATH113$/);
+});
+
+test('a course page links back to its department', async ({ page }) => {
+  await page.goto('/courses/CS310');
+  await page.getByRole('link', { name: 'All CS courses' }).click();
+  await expect(page).toHaveURL(/\/\?dept=CS$/);
+  await expect(page.getByRole('heading', { name: /All Computer Science courses/ })).toBeVisible();
+});
+
 test('course page groups syllabi by term, newest first', async ({ page }) => {
   await page.goto('/courses/CS310');
   const terms = page.getByRole('heading', { level: 2 });
