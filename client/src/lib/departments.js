@@ -7,7 +7,7 @@ export function sortDepartments(departments) {
   );
 }
 
-// Codes computer science goes by at different schools.
+// Codes computer science goes by at different schools, most likely first.
 const COMPUTER_SCIENCE = ['CS', 'COMP', 'CSC', 'CSCI', 'CMSC', 'CSE'];
 
 // The department the home page lists: the one in the address, else GMU's CS, else the
@@ -19,6 +19,7 @@ export function pickDepartment(departments, school, wanted) {
   if (!departments.length) return null;
   const busiest = [...departments].sort((a, b) => b.withSyllabi - a.withSyllabi)[0];
   if (busiest.withSyllabi > 0) return busiest.code;
-  const cs = departments.find((d) => COMPUTER_SCIENCE.includes(d.display));
+  // In the list's order, so Georgia Tech's CS wins over its CSE ("Computational Science").
+  const cs = COMPUTER_SCIENCE.map((code) => departments.find((d) => d.display === code)).find(Boolean);
   return (cs || departments[0]).code;
 }

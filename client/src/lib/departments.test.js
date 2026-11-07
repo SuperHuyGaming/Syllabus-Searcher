@@ -23,6 +23,11 @@ describe('pickDepartment', () => {
     const withOne = unc.map((d) => (d.display === 'MATH' ? { ...d, withSyllabi: 1 } : d));
     expect(pickDepartment(withOne, 'unc')).toBe('unc:MATH');
     expect(pickDepartment([unc[0]], 'unc')).toBe('unc:AERO');
+    const gatech = [
+      { code: 'gatech:CSE', display: 'CSE', name: 'Computational Science & Engr', withSyllabi: 0 },
+      { code: 'gatech:CS', display: 'CS', name: 'Computer Science', withSyllabi: 0 },
+    ];
+    expect(pickDepartment(gatech, 'gatech')).toBe('gatech:CS');
   });
 });
 

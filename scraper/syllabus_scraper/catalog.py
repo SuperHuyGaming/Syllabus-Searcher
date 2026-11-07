@@ -62,8 +62,25 @@ def parse_departments(page, prefix="/courses/"):
         )
         if match and match.group("code") not in departments:
             code = match.group("code")
-            departments[code] = {"code": code, "name": match.group("name").strip(), "slug": slug}
+            departments[code] = {"code": code, "name": _readable_name(match.group("name").strip()), "slug": slug}
     return list(departments.values())
+
+
+SMALL_WORDS = {"and", "of", "in", "the", "for", "to", "a", "an", "on", "at", "or"}
+
+
+def _readable_name(name):
+    """UNC writes department names in capitals ("COMPUTER SCIENCE"); the site shows
+    them like everyone else's ("Computer Science"). Names in mixed case stay as they are."""
+    if not name.isupper():
+        return name
+    words = name.lower().split(" ")
+    return " ".join(w if i and w in SMALL_WORDS else _capitalize(w) for i, w in enumerate(words))
+
+
+def _capitalize(word):
+    """Capitalizes each part of a hyphenated word: african-american -> African-American."""
+    return "-".join(part[:1].upper() + part[1:] for part in word.split("-"))
 
 
 def _heading(block, dept):
