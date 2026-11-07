@@ -6,6 +6,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { api } from '../api';
 import { recentTerms } from '../lib/terms';
 import { CourseField, ProfessorField } from '../components/CourseFields';
+import { useSchool } from '../components/School';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 // Some professors post the syllabus as a web page; the site makes a PDF copy of those.
@@ -15,6 +16,7 @@ const TERMS = recentTerms();
 
 export default function Upload() {
   const [params] = useSearchParams();
+  const { school, schools } = useSchool();
   const [form, setForm] = useState({
     course: params.get('course') || '',
     term: TERMS[0].label,
@@ -38,7 +40,7 @@ export default function Upload() {
   function submit(e) {
     e.preventDefault();
     if (!file) return setFileError('Choose a PDF or HTML file.');
-    upload.mutate({ ...form, file });
+    upload.mutate({ ...form, file, school: school.key });
   }
 
   if (upload.isSuccess) {
@@ -56,10 +58,16 @@ export default function Upload() {
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 3 }}>
         No account needed. Uploads are checked before they appear on the site.
+        {schools.length > 1 && ` This one is for ${school.name}; pick another school at the top.`}
       </Typography>
 
       <Stack spacing={2}>
-        <CourseField value={form.course} onChange={(course) => setForm((f) => ({ ...f, course }))} required />
+        <CourseField
+          school={school.key}
+          value={form.course}
+          onChange={(course) => setForm((f) => ({ ...f, course }))}
+          required
+        />
         <TextField select label="Term" value={form.term} onChange={set('term')} required>
           {TERMS.map((t) => (
             <MenuItem key={t.key} value={t.label}>
@@ -69,6 +77,7 @@ export default function Upload() {
         </TextField>
         <TextField label="Section" placeholder="001" value={form.section} onChange={set('section')} required />
         <ProfessorField
+          school={school.key}
           course={form.course}
           value={form.instructor}
           onChange={(instructor) => setForm((f) => ({ ...f, instructor }))}

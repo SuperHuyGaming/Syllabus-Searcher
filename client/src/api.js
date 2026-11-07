@@ -18,18 +18,23 @@ const post = (path, body, token) =>
 
 export const syllabusUrl = (fileId) => `/api/syllabi/${fileId}`;
 
-export const api = {
-  departments: () => json('/departments'),
-  courses: (dept = 'CS') => json(`/courses?${new URLSearchParams({ dept })}`),
-  // Courses in any department whose code or title matches, e.g. "math 2" or "data struct".
-  findCourses: (q) => json(`/courses?${new URLSearchParams({ q })}`),
-  course: (code) => json(`/courses/${encodeURIComponent(code)}`),
-  professors: () => json('/professors'),
-  status: () => json('/status'),
-  search: (q) => json(`/search?${new URLSearchParams({ q })}`),
+// GMU is the API's default, so it's left out of addresses (and CloudFront caches one copy).
+const withSchool = (params, school) => new URLSearchParams({ ...(school && school !== 'gmu' && { school }), ...params });
 
-  upload: ({ course, term, section, instructor, file }) => {
-    const query = new URLSearchParams({ course, term, section, instructor });
+export const api = {
+  schools: () => json('/schools'),
+  departments: (school) => json(`/departments?${withSchool({}, school)}`),
+  // `dept` is the full key ("CS", "unc:COMP"), so it names its own school.
+  courses: (dept = 'CS') => json(`/courses?${new URLSearchParams({ dept })}`),
+  // One school's courses whose code or title matches, e.g. "math 2" or "data struct".
+  findCourses: (q, school) => json(`/courses?${withSchool({ q }, school)}`),
+  course: (code) => json(`/courses/${encodeURIComponent(code)}`),
+  professors: (school) => json(`/professors?${withSchool({}, school)}`),
+  status: () => json('/status'),
+  search: (q, school) => json(`/search?${withSchool({ q }, school)}`),
+
+  upload: ({ course, term, section, instructor, file, school }) => {
+    const query = withSchool({ course, term, section, instructor }, school);
     const type = /\.html?$/i.test(file.name) ? 'text/html' : 'application/pdf';
     return json(`/uploads?${query}`, { method: 'POST', headers: { 'Content-Type': type }, body: file });
   },
@@ -45,9 +50,10 @@ export const api = {
   deleteOffering: ({ code, id }, token) => post('/admin/offerings/delete', { code, id }, token),
   saveSummary: (fileId, summary, token) => post(`/admin/summaries/${fileId}`, { summary }, token),
   regenerateSummary: (fileId, token) => post(`/admin/summaries/${fileId}/regenerate`, {}, token),
-  adminProfessors: (token) => json('/admin/professors', { token }),
+  adminProfessors: (token, school) => json(`/admin/professors?${withSchool({}, school)}`, { token }),
   // Without `apply` this is a preview: it lists what would change and writes nothing.
   scrapeStatus: (token) => json('/admin/refresh', { token }),
   startScrape: (token) => post('/admin/refresh', {}, token),
-  mergeProfessors: ({ from, into, apply }, token) => post('/admin/professors/merge', { from, into, apply }, token),
+  mergeProfessors: ({ from, into, apply, school }, token) =>
+    post('/admin/professors/merge', { from, into, apply, school: school || 'gmu' }, token),
 };

@@ -1,4 +1,4 @@
-"""Scrapes GMU syllabi into MongoDB (files) and DynamoDB (offerings), and GMU's course catalog into MongoDB.
+"""Scrapes GMU syllabi into MongoDB (files) and DynamoDB (offerings), and course catalogs (GMU and the other schools in syllabus_scraper/schools.py) into MongoDB.
 
     python scrape.py --since "Fall 2022"            # live site + Internet Archive
     python scrape.py --dry-run                      # parse only, write nothing
@@ -6,6 +6,7 @@
     python scrape.py --index-only                   # just make saved files searchable
     python scrape.py --catalog-only                 # just load every course from catalog.gmu.edu
     python scrape.py --catalog-only --departments CS,MATH   # just these departments
+    python scrape.py --catalog-only --schools unc --dry-run # count one school's courses, write nothing
 
 Two passes:
   1. Listing pages (live or archived): course, section, title and instructor come from the table.
@@ -23,6 +24,7 @@ from dotenv import load_dotenv
 
 from syllabus_scraper import sources
 from syllabus_scraper.catalog import fetch_catalog, fetch_departments
+from syllabus_scraper.schools import SCHOOLS
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
 from syllabus_scraper.store import Store, detect_content_type
 from syllabus_scraper.text import extract_text
@@ -134,6 +136,7 @@ def main(argv=None):
     parser.add_argument("--catalog-only", action="store_true", help="Only load the course list from catalog.gmu.edu")
     parser.add_argument("--no-catalog", action="store_true", help="Skip loading the course list from catalog.gmu.edu")
     parser.add_argument("--departments", default="", help='Only load these catalog departments, e.g. "CS,MATH"')
+    parser.add_argument("--schools", default="", help='Only load these catalogs, e.g. "gmu,unc" (syllabus_scraper/schools.py)')
     parser.add_argument("--reindex", action="store_true", help="Re-extract text for every file, not just new ones")
     args = parser.parse_args(argv)
 
@@ -182,26 +185,35 @@ def main(argv=None):
                 return
 
     def load_catalog():
-        departments = fetch_departments(fetcher)
-        if not departments:
-            log.warning("Couldn't read the catalog's list of departments; keeping the current course lists")
-            return
+        """Every department and course of each school's catalog. With --dry-run, only counts them."""
+        wanted_schools = {k.strip().lower() for k in args.schools.split(",") if k.strip()}
         wanted = {d.strip().upper() for d in args.departments.split(",") if d.strip()}
-        total = 0
-        for department in departments:
-            dept = department["code"]
-            if wanted and dept not in wanted:
+        for school in SCHOOLS:
+            key = school["key"]
+            if wanted_schools and key not in wanted_schools:
                 continue
-            courses = fetch_catalog(fetcher, dept, department["slug"])
-            if not courses:
-                log.warning("Couldn't read the %s course catalog; keeping its current course list", dept)
+            departments = fetch_departments(fetcher, school["catalog"])
+            if not departments:
+                log.warning("Couldn't read %s's list of departments; keeping its current course lists", key)
                 continue
-            total += store.save_department(department, courses)
-        log.info("Loaded %d courses in %d departments from the catalog", total, len(wanted or departments))
+            total = loaded = 0
+            for department in departments:
+                dept = department["code"]
+                if wanted and dept not in wanted:
+                    continue
+                courses = fetch_catalog(fetcher, dept, department["slug"], school["catalog"])
+                if not courses:
+                    log.warning("Couldn't read the %s %s course catalog; keeping its current course list", key, dept)
+                    continue
+                total += store.save_department(key, department, courses) if store else len(courses)
+                loaded += 1
+            if store and not wanted:
+                store.save_school(school, loaded, total)
+            log.info("%s: loaded %d courses in %d departments from the catalog", key, total, loaded)
 
     if args.catalog_only:
+        load_catalog()
         if store:
-            load_catalog()
             store.count_syllabi()
         return 0
 

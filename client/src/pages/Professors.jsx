@@ -15,12 +15,16 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { api } from '../api';
-import { matchProfessors } from '../lib/professors';
-
-const display = (code) => code.replace(/^([A-Z]+)/, '$1 ');
+import { matchProfessors, professorPath } from '../lib/professors';
+import { displayCourse as display } from '../lib/courses';
+import { useSchool } from '../components/School';
 
 export default function Professors() {
-  const { data, isPending, error } = useQuery({ queryKey: ['professors'], queryFn: api.professors });
+  const { school } = useSchool();
+  const { data, isPending, error } = useQuery({
+    queryKey: ['professors', school.key],
+    queryFn: () => api.professors(school.key),
+  });
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
 
@@ -33,7 +37,7 @@ export default function Professors() {
         Professors
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 3 }}>
-        Every professor with a syllabus on file, and the courses they&apos;ve taught.
+        Every {school.short} professor with a syllabus on file, and the courses they&apos;ve taught.
       </Typography>
 
       {/* Type a first or last name; pick a suggestion (click or Enter) to open that professor. */}
@@ -44,7 +48,7 @@ export default function Professors() {
         getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
         inputValue={query}
         onInputChange={(_, next, reason) => reason !== 'reset' && setQuery(next)}
-        onChange={(_, picked) => picked && typeof picked !== 'string' && navigate(`/professors/${picked.slug}`)}
+        onChange={(_, picked) => picked && typeof picked !== 'string' && navigate(professorPath(picked.slug, school.key))}
         renderOption={({ key, ...props }, option) => (
           <Box component="li" key={key} {...props} sx={{ display: 'block !important' }}>
             <Typography sx={{ fontWeight: 700 }}>{option.name}</Typography>
@@ -86,7 +90,7 @@ export default function Professors() {
         {professors.map((p) => (
           <Grid key={p.slug} size={{ xs: 12, sm: 6, md: 4 }}>
             <Card variant="outlined" sx={{ height: '100%' }}>
-              <CardActionArea component={RouterLink} to={`/professors/${p.slug}`} sx={{ p: 1.5, height: '100%' }}>
+              <CardActionArea component={RouterLink} to={professorPath(p.slug, school.key)} sx={{ p: 1.5, height: '100%' }}>
                 <Typography sx={{ fontWeight: 700 }}>{p.name}</Typography>
                 <Typography variant="body2" color="text.secondary" noWrap>
                   {p.courses.map(display).join(', ')}

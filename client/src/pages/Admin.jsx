@@ -24,7 +24,8 @@ import {
 import { api, syllabusUrl } from '../api';
 import { supabase } from '../supabase';
 import { groupByTerm, recentTerms, termLabel } from '../lib/terms';
-import { displayCourse } from '../lib/courses';
+import { DEFAULT_SCHOOL, displayCourse, schoolOf } from '../lib/courses';
+import { useSchool } from '../components/School';
 import { likelySpellings } from '../lib/professors';
 import { fileCheckMessage, virusScanMessage } from '../lib/filecheck';
 import { aiCheckMessage } from '../lib/aicheck';
@@ -177,15 +178,16 @@ function termOptions(current) {
 
 // Course, term, section and professor inputs, shared by the review and edit forms.
 // A course that isn't on the site yet also needs a title.
-function DetailFields({ form, setForm, professorsField = 'instructor' }) {
+// `school` is the school of the syllabus being edited; a bare code is read there.
+function DetailFields({ form, setForm, school, professorsField = 'instructor' }) {
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
-  const { code, known, loaded } = useCourseLookup(form.course);
+  const { code, known, loaded } = useCourseLookup(form.course, school);
   const isNew = Boolean(code && loaded && !known);
 
   return (
     <Stack spacing={2} sx={{ mt: 2 }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-        <CourseField size="small" value={form.course} onChange={set('course')} />
+        <CourseField size="small" school={school} value={form.course} onChange={set('course')} />
         <TextField
           select
           size="small"
@@ -205,6 +207,7 @@ function DetailFields({ form, setForm, professorsField = 'instructor' }) {
       <ProfessorField
         size="small"
         label="Professors"
+        school={school}
         course={form.course}
         value={form[professorsField]}
         onChange={set(professorsField)}
@@ -301,7 +304,8 @@ function UploadCard({ upload, token }) {
     <Card variant="outlined">
       <CardContent>
         <Typography sx={{ fontWeight: 700 }}>
-          Student entered: {displayCourse(upload.course_code)} · {termLabel(upload.term_key)} · Section {upload.section} ·{' '}
+          Student entered: {schoolOf(upload.course_code) !== DEFAULT_SCHOOL && `${schoolOf(upload.course_code).toUpperCase()} `}
+          {displayCourse(upload.course_code)} · {termLabel(upload.term_key)} · Section {upload.section} ·{' '}
           {upload.instructor}
         </Typography>
         <Typography variant="caption" color="text.secondary">
@@ -333,7 +337,7 @@ function UploadCard({ upload, token }) {
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           View the file and fix anything that doesn&apos;t match before approving.
         </Typography>
-        <DetailFields form={form} setForm={setForm} />
+        <DetailFields form={form} setForm={setForm} school={schoolOf(upload.course_code)} />
         <TextField
           size="small"
           label="Reject reason (optional)"
@@ -454,8 +458,9 @@ function AiCheck({ ai, running, error, onRun }) {
 
 // Pick a course, then fix or remove any syllabus listed under it (scraped or uploaded).
 function Published({ token }) {
+  const { school } = useSchool();
   const [course, setCourse] = useState('');
-  const { known } = useCourseLookup(course);
+  const { known } = useCourseLookup(course, school.key);
   const { data, isFetching, error } = useQuery({
     queryKey: ['admin-course', known?.code],
     queryFn: () => api.adminCourse(known.code, token),
@@ -468,7 +473,7 @@ function Published({ token }) {
         Choose a course to move a syllabus to the right course, fix its term, section or professors, or take it
         down. Fixes to scraped syllabi stick: the weekly scrape won&apos;t undo them.
       </Typography>
-      <CourseField value={course} onChange={setCourse} />
+      <CourseField school={school.key} value={course} onChange={setCourse} />
       {error && (
         <Alert severity="error" sx={{ mt: 2 }}>
           {error.message}
@@ -576,7 +581,12 @@ function Professors({ token }) {
   const [into, setInto] = useState('');
   const [preview, setPreview] = useState(null);
   const [merged, setMerged] = useState(null);
-  const { data, error } = useQuery({ queryKey: ['admin-professors'], queryFn: () => api.adminProfessors(token) });
+  // Names are per school: the header's school picks whose professors are listed and merged.
+  const { school } = useSchool();
+  const { data, error } = useQuery({
+    queryKey: ['admin-professors', school.key],
+    queryFn: () => api.adminProfessors(token, school.key),
+  });
   const professors = useMemo(() => data?.professors || [], [data]);
   const byName = useMemo(() => new Map(professors.map((p) => [p.name, p])), [professors]);
   const groups = useMemo(() => likelySpellings(professors.map((p) => p.name)), [professors]);
@@ -588,11 +598,11 @@ function Professors({ token }) {
     setMerged(null);
   };
   const check = useMutation({
-    mutationFn: () => api.mergeProfessors({ from, into }, token),
+    mutationFn: () => api.mergeProfessors({ from, into, school: school.key }, token),
     onSuccess: (result) => setPreview(result.changes),
   });
   const merge = useMutation({
-    mutationFn: () => api.mergeProfessors({ from, into, apply: true }, token),
+    mutationFn: () => api.mergeProfessors({ from, into, apply: true, school: school.key }, token),
     onSuccess: async (result) => {
       setMerged({ from, into, count: result.changes.length });
       setFrom(null);
@@ -763,7 +773,7 @@ function OfferingRow({ code, offering, token }) {
             View syllabus
           </Link>
         </Stack>
-        {editing && <DetailFields form={form} setForm={setForm} professorsField="instructors" />}
+        {editing && <DetailFields form={form} setForm={setForm} school={schoolOf(code)} professorsField="instructors" />}
         {(save.error || remove.error) && (
           <Alert severity="error" sx={{ mt: 1 }}>
             {(save.error || remove.error).message}

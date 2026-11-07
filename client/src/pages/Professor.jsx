@@ -7,10 +7,15 @@ import { api } from '../api';
 import SyllabusButtons from '../components/SyllabusButtons';
 import { groupByTerm } from '../lib/terms';
 import { findProfessor } from '../lib/professors';
+import { useSchool } from '../components/School';
 
 export default function Professor() {
   const { slug } = useParams();
-  const { data, isPending, error } = useQuery({ queryKey: ['professors'], queryFn: api.professors });
+  const { school } = useSchool();
+  const { data, isPending, error } = useQuery({
+    queryKey: ['professors', school.key],
+    queryFn: () => api.professors(school.key),
+  });
 
   if (isPending) return <Skeleton variant="rounded" height={240} />;
   if (error) return <Alert severity="error">{error.message}</Alert>;
@@ -20,7 +25,7 @@ export default function Professor() {
 
   return (
     <>
-      <Button component={RouterLink} to="/professors" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
+      <Button component={RouterLink} to={school.key === 'gmu' ? '/professors' : `/professors?school=${school.key}`} startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
         All professors
       </Button>
       <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>

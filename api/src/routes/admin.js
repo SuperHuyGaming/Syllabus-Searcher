@@ -1,5 +1,5 @@
 const { json, binary, header, bodyJson, HttpError } = require('../lib/http');
-const { parseTerm, displayCourse, normalizeCourse } = require('../lib/terms');
+const { parseTerm, displayCourse, normalizeCourse, deptOf, schoolOf } = require('../lib/terms');
 const {
   parseReviewDetails,
   parseCourse,
@@ -135,6 +135,7 @@ module.exports = ({
         const body = bodyJson(event);
         const details = parseReviewDetails({
           course: body.course ?? upload.course_code,
+          school: schoolOf(upload.course_code),
           term: body.term ?? upload.term_key,
           section: body.section ?? upload.section,
           instructor: body.instructor ?? upload.instructor,
@@ -157,6 +158,7 @@ module.exports = ({
         // The admin can correct what the student typed before publishing.
         const details = parseReviewDetails({
           course: body.course ?? upload.course_code,
+          school: schoolOf(upload.course_code),
           term: body.term ?? upload.term_key,
           section: body.section ?? upload.section,
           instructor: body.instructor ?? upload.instructor,
@@ -234,9 +236,9 @@ module.exports = ({
         const reviewer = await requireAdmin(event);
         const body = bodyJson(event);
         const old = await offering(body.code, body.id);
-        const code = parseCourse(body.course ?? old.code);
+        const code = parseCourse(body.course ?? old.code, schoolOf(old.code));
         const next = {
-          dept: code === old.code ? old.code.match(/^[A-Z]+/)[0] : await requireDepartment(departments, code),
+          dept: code === old.code ? deptOf(old.code) : await requireDepartment(departments, code),
           code,
           title: await courseTitle(code, code === old.code ? body.title || old.title : body.title),
           term: body.term === undefined ? parseTerm(old.termKey) : parseTermInput(body.term),
@@ -255,10 +257,12 @@ module.exports = ({
       // spot two spellings of one person. The public list groups some of these together.
       method: 'GET',
       path: /^\/api\/admin\/professors$/,
-      async handler({ event }) {
+      // One school's names (?school=unc, GMU by default).
+      async handler({ event, query }) {
         await requireAdmin(event);
+        const school = String(query.school || 'gmu');
         const byName = new Map();
-        for (const o of await catalog.listOfferings()) {
+        for (const o of (await catalog.listOfferings()).filter((x) => schoolOf(x.code) === school)) {
           for (const name of o.instructors || []) {
             if (!byName.has(name)) byName.set(name, { name, count: 0, courses: new Set() });
             const entry = byName.get(name);
@@ -279,10 +283,10 @@ module.exports = ({
       path: /^\/api\/admin\/professors\/merge$/,
       async handler({ event }) {
         const reviewer = await requireAdmin(event);
-        const { from, into, apply } = bodyJson(event);
+        const { from, into, apply, school = 'gmu' } = bodyJson(event);
         let changes;
         try {
-          changes = await renameProfessor({ catalog, search }, from, into, { apply: apply === true, by: reviewer });
+          changes = await renameProfessor({ catalog, search }, from, into, { apply: apply === true, by: reviewer, school });
         } catch (err) {
           if (err instanceof HttpError) throw err;
           throw new HttpError(400, err.message);

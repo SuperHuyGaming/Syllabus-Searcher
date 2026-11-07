@@ -2,18 +2,23 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Autocomplete, Box, Chip, Stack, TextField, Typography } from '@mui/material';
 import { api } from '../api';
-import { deptOfText, displayCourse, normalizeCourse } from '../lib/courses';
+import { DEFAULT_SCHOOL, deptKey, deptOfText, displayCourse, normalizeCourse } from '../lib/courses';
 import { instructorsOf } from '../lib/terms';
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
-// The courses of the department being typed ("MATH 2" loads MATH), plus what the
-// typed text resolves to. `loaded` is true once a missing course is really missing.
-export function useCourseLookup(text) {
-  const { data: depts } = useQuery({ queryKey: ['departments'], queryFn: api.departments, staleTime: FIVE_MINUTES });
+// The courses of the department being typed at a school ("MATH 2" loads MATH), plus what
+// the typed text resolves to. `loaded` is true once a missing course is really missing.
+export function useCourseLookup(text, school = DEFAULT_SCHOOL) {
+  const { data: depts } = useQuery({
+    queryKey: ['departments', school],
+    queryFn: () => api.departments(school),
+    staleTime: FIVE_MINUTES,
+  });
   const typed = deptOfText(text);
-  // CS is always on the site, even before the catalog of other departments is loaded.
-  const dept = typed && (typed === 'CS' || depts?.departments.some((d) => d.code === typed)) ? typed : null;
+  const key = typed && deptKey(typed, school);
+  // GMU's CS is always on the site, even before the catalog of other departments is loaded.
+  const dept = key && (key === 'CS' || depts?.departments.some((d) => d.code === key)) ? key : null;
   const { data } = useQuery({
     queryKey: ['courses', dept],
     queryFn: () => api.courses(dept),
@@ -21,15 +26,15 @@ export function useCourseLookup(text) {
     staleTime: FIVE_MINUTES,
   });
   const courses = useMemo(() => (dept && data?.courses) || [], [dept, data]);
-  const code = normalizeCourse(text);
+  const code = normalizeCourse(text, school);
   const known = code ? courses.find((c) => c.code === code) : null;
   return { courses, code, known, loaded: dept ? Boolean(data) : Boolean(depts) };
 }
 
 // Course code input that suggests known courses and shows the title of the one typed,
 // so "CS 580" vs "CS 584" is obvious before submitting.
-export function CourseField({ value, onChange, label = 'Course code', required, size }) {
-  const { courses, code, known, loaded } = useCourseLookup(value);
+export function CourseField({ value, onChange, school, label = 'Course code', required, size }) {
+  const { courses, code, known, loaded } = useCourseLookup(value, school);
 
   let helperText = 'Type a department and number, like CS 310 or MATH 113';
   if (known) helperText = `${known.display} · ${known.title}`;
@@ -71,8 +76,8 @@ export function CourseField({ value, onChange, label = 'Course code', required, 
 
 // Professor input that suggests the names already listed for this course, in the
 // same "Last, F" form, so one person doesn't show up under two spellings.
-export function ProfessorField({ course, value, onChange, label = 'Professor', required, size, helperText }) {
-  const { known } = useCourseLookup(course);
+export function ProfessorField({ course, school, value, onChange, label = 'Professor', required, size, helperText }) {
+  const { known } = useCourseLookup(course, school);
   const { data } = useQuery({
     queryKey: ['course', known?.code],
     queryFn: () => api.course(known.code),

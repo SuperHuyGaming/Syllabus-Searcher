@@ -5,6 +5,7 @@ function fakeDb(docs) {
   const matches = (doc, filter) =>
     Object.entries(filter).every(([key, cond]) => {
       if (key === '$and') return cond.every((f) => matches(doc, f));
+      if (cond && cond.$in) return cond.$in.includes(doc[key] ?? null);
       if (cond && cond.$regex !== undefined) return new RegExp(cond.$regex, cond.$options).test(doc[key] || '');
       return doc[key] === cond;
     });
@@ -60,5 +61,50 @@ describe('departments', () => {
     expect(await departments.exists('CS')).toBe(true);
     expect(await departments.exists('MATH')).toBe(true);
     expect(await departments.exists('XYZ')).toBe(false);
+  });
+});
+
+describe('several schools', () => {
+  const docs = {
+    courses: [
+      { _id: 'CS310', dept: 'CS', title: 'Data Structures' }, // written before schools existed
+      { _id: 'MATH203', dept: 'MATH', school: 'gmu', title: 'Linear Algebra' },
+      { _id: 'unc:COMP210', dept: 'unc:COMP', school: 'unc', title: 'Data Structures and Analysis' },
+      { _id: 'unc:MATH547', dept: 'unc:MATH', school: 'unc', title: 'Linear Algebra for Applications' },
+    ],
+    departments: [
+      { _id: 'CS', name: 'Computer Science' },
+      { _id: 'unc:COMP', school: 'unc', name: 'Computer Science' },
+    ],
+    schools: [{ _id: 'unc', name: 'University of North Carolina at Chapel Hill', short: 'UNC' }],
+  };
+  const repo = createDepartments({ db: fakeDb(docs) });
+
+  test('title search stays inside the school, counting old documents as GMU', async () => {
+    expect(codes(await repo.search('data structures'))).toEqual(['CS310']);
+    expect(codes(await repo.search('data structures', 'unc'))).toEqual(['unc:COMP210']);
+    expect(codes(await repo.search('linear', 'gmu'))).toEqual(['MATH203']);
+  });
+
+  test('code search reads bare codes at the chosen school', async () => {
+    expect(codes(await repo.search('comp 2', 'unc'))).toEqual(['unc:COMP210']);
+    expect(codes(await repo.search('comp 2'))).toEqual([]);
+    expect(codes(await repo.search('math', 'unc'))).toEqual(['unc:MATH547']);
+  });
+
+  test('departments list per school with bare display codes', async () => {
+    expect(await repo.list('unc')).toEqual([
+      { code: 'unc:COMP', display: 'COMP', name: 'Computer Science', courses: 0, withSyllabi: 0 },
+    ]);
+    expect((await repo.list()).map((d) => d.code)).toEqual(['CS']);
+  });
+
+  test('GMU is always a school and comes first', async () => {
+    expect((await repo.schools()).map((s) => s.key)).toEqual(['gmu', 'unc']);
+    expect(await repo.schoolExists('gmu')).toBe(true);
+    expect(await repo.schoolExists('unc')).toBe(true);
+    expect(await repo.schoolExists('vt')).toBe(false);
+    expect(await repo.schoolName('unc')).toBe('UNC');
+    expect(await repo.schoolName('gmu')).toBe('GMU');
   });
 });
