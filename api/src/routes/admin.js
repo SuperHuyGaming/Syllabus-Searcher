@@ -1,6 +1,13 @@
 const { json, binary, header, bodyJson, HttpError } = require('../lib/http');
 const { parseTerm, displayCourse, normalizeCourse } = require('../lib/terms');
-const { parseReviewDetails, parseCourse, parseTermInput, parseSection, parseInstructors } = require('../lib/details');
+const {
+  parseReviewDetails,
+  parseCourse,
+  requireDepartment,
+  parseTermInput,
+  parseSection,
+  parseInstructors,
+} = require('../lib/details');
 const { checkUpload: aiCheck } = require('../lib/ai');
 const { fileText } = require('../lib/text');
 const { aiReview } = require('../lib/review');
@@ -20,6 +27,7 @@ const HTML_SANDBOX = { 'Content-Security-Policy': "sandbox; default-src 'none'; 
 
 module.exports = ({
   catalog,
+  departments,
   files,
   uploads,
   search,
@@ -53,9 +61,11 @@ module.exports = ({
   }
 
   // A new course needs a title; an existing one keeps its stored title unless one is given.
+  // A catalog course's first syllabus takes the catalog's title.
   async function courseTitle(code, title) {
-    const meta = await catalog.getCourseMeta(code);
-    const courseTitle = String(title || meta?.title || '').trim();
+    const meta = title ? null : await catalog.getCourseMeta(code);
+    const official = title || meta?.title ? null : await departments.course(code);
+    const courseTitle = String(title || meta?.title || official?.title || '').trim();
     if (!courseTitle) throw new HttpError(400, `Add a course title for ${displayCourse(code)}`);
     if (courseTitle.length > 120) throw new HttpError(400, 'Course title is too long');
     return courseTitle;
@@ -131,7 +141,7 @@ module.exports = ({
         });
         const file = await files.read('pending', upload.file_id);
         if (!file) throw new HttpError(404, 'The uploaded file is missing');
-        const ai = await aiReview({ catalog, buffer: file.buffer, contentType: file.contentType, details, readText, checkUpload });
+        const ai = await aiReview({ catalog, departments, buffer: file.buffer, contentType: file.contentType, details, readText, checkUpload });
         const saved = await uploads.saveDetected(upload.id, { ...upload.detected, ai });
         return json(200, saved || { ...upload, detected: { ...upload.detected, ai } }, NO_STORE);
       },
@@ -151,6 +161,7 @@ module.exports = ({
           section: body.section ?? upload.section,
           instructor: body.instructor ?? upload.instructor,
         });
+        const dept = await requireDepartment(departments, details.code);
         const title = await courseTitle(details.code, body.title);
         if (upload.detected?.virusScan?.status === 'infected') {
           throw new HttpError(409, 'The virus scanner flagged this file. Reject it instead.');
@@ -158,8 +169,8 @@ module.exports = ({
 
         const moved = await files.move('pending', 'syllabi', upload.file_id);
         if (!moved) throw new HttpError(404, 'The uploaded file is missing');
-        await catalog.putOffering({
-          dept: details.code.match(/^[A-Z]+/)[0],
+        const { firstSyllabus } = await catalog.putOffering({
+          dept,
           code: details.code,
           title,
           term: details.term,
@@ -170,6 +181,10 @@ module.exports = ({
           source: 'upload',
         });
         await catalog.markUploaded();
+        if (firstSyllabus) {
+          // Only a count on the department list, so a failure doesn't undo the approve.
+          await departments.addCourseWithSyllabi(dept).catch((err) => console.error('department count failed', err));
+        }
         const changes = {
           course_code: details.code,
           term_key: details.term.key,
@@ -221,7 +236,7 @@ module.exports = ({
         const old = await offering(body.code, body.id);
         const code = parseCourse(body.course ?? old.code);
         const next = {
-          dept: code.match(/^[A-Z]+/)[0],
+          dept: code === old.code ? old.code.match(/^[A-Z]+/)[0] : await requireDepartment(departments, code),
           code,
           title: await courseTitle(code, code === old.code ? body.title || old.title : body.title),
           term: body.term === undefined ? parseTerm(old.termKey) : parseTermInput(body.term),

@@ -1,10 +1,13 @@
 """Writes scraped syllabi to the same stores the API reads:
-files -> MongoDB GridFS bucket "syllabi", catalog -> DynamoDB (layout in api/src/repos/catalog.js),
-searchable text -> MongoDB collection "syllabus_text" (read by api/src/repos/search.js).
+files -> MongoDB GridFS bucket "syllabi", courses with syllabi and their offerings -> DynamoDB
+(layout in api/src/repos/catalog.js), searchable text -> MongoDB collection "syllabus_text"
+(read by api/src/repos/search.js), GMU's official catalog -> MongoDB collections "departments"
+and "courses" (read by api/src/repos/departments.js).
 """
 
 import logging
 import os
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -12,7 +15,7 @@ import boto3
 import gridfs
 from boto3.dynamodb.conditions import Attr, Key
 from bson import ObjectId
-from pymongo import MongoClient
+from pymongo import MongoClient, UpdateOne
 
 from .names import full_name, needs_full_name
 from .pdf import PdfMaker
@@ -63,7 +66,10 @@ class Store:
 
     def course_title(self, code):
         item = self.table.get_item(Key={"PK": f"COURSE#{code}", "SK": "META"}).get("Item")
-        return item["title"] if item else None
+        if item:
+            return item["title"]
+        course = self.db["courses"].find_one({"_id": code}, {"title": 1})
+        return course["title"] if course else None
 
     def save_file(self, data, source_url, content_type):
         filename = source_url.rsplit("/", 1)[-1]
@@ -116,39 +122,50 @@ class Store:
             ExpressionAttributeValues={":now": datetime.now(timezone.utc).isoformat()},
         )
 
-    def save_catalog(self, dept, courses):
-        """Adds every course from the official catalog, with or without a syllabus.
-        The catalog's title, credits, description and prerequisites win over the listings'."""
-        now = datetime.now(timezone.utc).isoformat()
-        with_syllabi = {o["code"] for offerings in self.offerings_by_file().values() for o in offerings}
-        for course in courses:
-            code = course["code"]
-            self.table.update_item(
-                Key={"PK": f"DEPT#{dept}", "SK": f"COURSE#{code}"},
-                UpdateExpression=(
-                    "SET code = :code, title = :title, inCatalog = :yes, hasSyllabi = :has, updatedAt = :now"
-                ),
-                ExpressionAttributeValues={
-                    ":code": code, ":title": course["title"], ":yes": True, ":has": code in with_syllabi, ":now": now,
-                },
+    def save_department(self, department, courses):
+        """Writes one department and every course the catalog lists for it, with or without
+        a syllabus. Courses the catalog dropped are removed. The site shows the catalog's
+        title, credits, description and prerequisites over the listings' (the API merges them).
+        Kept in MongoDB, not DynamoDB: GMU has over ten thousand courses, and the DynamoDB
+        table's small provisioned capacity is meant for the syllabi."""
+        dept, now = department["code"], datetime.now(timezone.utc).isoformat()
+        catalog = self.db["courses"]
+        catalog.create_index("dept")
+        writes = [
+            UpdateOne(
+                {"_id": c["code"]},
+                {"$set": {"dept": dept, "title": c["title"], "credits": c["credits"],
+                          "description": c["description"], "prereqs": c["prereqs"], "updatedAt": now}},
+                upsert=True,
             )
-            self.table.update_item(
-                Key={"PK": f"COURSE#{code}", "SK": "META"},
-                UpdateExpression=(
-                    "SET code = :code, title = :title, credits = :credits, description = :description, "
-                    "prereqs = :prereqs, inCatalog = :yes, updatedAt = :now"
-                ),
-                ExpressionAttributeValues={
-                    ":code": code,
-                    ":title": course["title"],
-                    ":credits": course["credits"],
-                    ":description": course["description"],
-                    ":prereqs": course["prereqs"],
-                    ":yes": True,
-                    ":now": now,
-                },
-            )
+            for c in courses
+        ]
+        if writes:
+            catalog.bulk_write(writes, ordered=False)
+        catalog.delete_many({"dept": dept, "_id": {"$nin": [c["code"] for c in courses]}})
+        self.db["departments"].update_one(
+            {"_id": dept},
+            {"$set": {"name": department["name"], "courses": len(courses), "updatedAt": now}},
+            upsert=True,
+        )
         return len(courses)
+
+    def count_syllabi(self):
+        """Sets withSyllabi on every department: how many of its courses have a syllabus.
+        The API adds one when an approved upload gives a course its first syllabus;
+        this weekly count corrects any drift (e.g. after an admin deletes one)."""
+        codes = {o["code"] for offerings in self.offerings_by_file().values() for o in offerings}
+        counts = defaultdict(int)
+        for code in codes:
+            counts[re.match(r"[A-Z]+", code).group(0)] += 1
+        departments = self.db["departments"]
+        departments.update_many({"_id": {"$nin": sorted(counts)}}, {"$set": {"withSyllabi": 0}})
+        for dept, count in counts.items():
+            # A department missing from the catalog still shows up, named by its code.
+            departments.update_one(
+                {"_id": dept}, {"$set": {"withSyllabi": count}, "$setOnInsert": {"name": dept, "courses": 0}}, upsert=True
+            )
+        return len(counts)
 
     def offerings_by_file(self):
         """Every offering in DynamoDB, grouped by the file it points to."""

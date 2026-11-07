@@ -27,6 +27,7 @@ import SyllabusButtons from '../components/SyllabusButtons';
 import SyllabusSummary from '../components/SyllabusSummary';
 import { hasRollup, hasSummary } from '../lib/summary';
 import { groupByTerm, instructorsOf } from '../lib/terms';
+import { deptOf } from '../lib/courses';
 import { professorSlug } from '../lib/professors';
 
 const ALL = 'all';
@@ -63,8 +64,8 @@ export default function Course() {
 
   return (
     <>
-      <Button component={RouterLink} to="/" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
-        All courses
+      <Button component={RouterLink} to={`/?dept=${deptOf(course.code)}`} startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
+        All {deptOf(course.code)} courses
       </Button>
       <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
         {course.display}

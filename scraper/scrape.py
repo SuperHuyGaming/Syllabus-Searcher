@@ -1,10 +1,11 @@
-"""Scrapes GMU CS syllabi into MongoDB (files) and DynamoDB (catalog).
+"""Scrapes GMU syllabi into MongoDB (files) and DynamoDB (offerings), and GMU's course catalog into MongoDB.
 
     python scrape.py --since "Fall 2022"            # live site + Internet Archive
     python scrape.py --dry-run                      # parse only, write nothing
     python scrape.py --html tests/fixtures/x.html   # parse saved pages instead of fetching the index
     python scrape.py --index-only                   # just make saved files searchable
     python scrape.py --catalog-only                 # just load every course from catalog.gmu.edu
+    python scrape.py --catalog-only --departments CS,MATH   # just these departments
 
 Two passes:
   1. Listing pages (live or archived): course, section, title and instructor come from the table.
@@ -21,13 +22,12 @@ from urllib.parse import unquote, urlsplit
 from dotenv import load_dotenv
 
 from syllabus_scraper import sources
-from syllabus_scraper.catalog import fetch_catalog
+from syllabus_scraper.catalog import fetch_catalog, fetch_departments
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
 from syllabus_scraper.store import Store, detect_content_type
 from syllabus_scraper.text import extract_text
 
 MAX_FILE_BYTES = 4 * 1024 * 1024  # same cap as the API (Lambda response limit)
-DEPARTMENTS = {"CS"}
 
 log = logging.getLogger("scraper")
 
@@ -133,6 +133,7 @@ def main(argv=None):
     parser.add_argument("--index-only", action="store_true", help="Skip scraping; only make saved files searchable")
     parser.add_argument("--catalog-only", action="store_true", help="Only load the course list from catalog.gmu.edu")
     parser.add_argument("--no-catalog", action="store_true", help="Skip loading the course list from catalog.gmu.edu")
+    parser.add_argument("--departments", default="", help='Only load these catalog departments, e.g. "CS,MATH"')
     parser.add_argument("--reindex", action="store_true", help="Re-extract text for every file, not just new ones")
     args = parser.parse_args(argv)
 
@@ -151,9 +152,8 @@ def main(argv=None):
     def handle(timestamp, row):
         """Returns False once --limit is reached."""
         counts["rows"] += 1
-        codes = [c for c in row.codes if dept_of(c) in DEPARTMENTS]
-        if not codes:
-            return True
+        # The CS listing also has cross-listed SWE and ISA courses; every GMU department is kept.
+        codes = row.codes
         if args.dry_run:
             log.info("%s  %-14s %-12s %-16s %s", row.term.label, ",".join(codes), row.section, row.source, "; ".join(row.instructors))
             return True
@@ -182,16 +182,27 @@ def main(argv=None):
                 return
 
     def load_catalog():
-        for dept in sorted(DEPARTMENTS):
-            courses = fetch_catalog(fetcher, dept)
-            if not courses:
-                log.warning("Couldn't read the %s course catalog; keeping the current course list", dept)
+        departments = fetch_departments(fetcher)
+        if not departments:
+            log.warning("Couldn't read the catalog's list of departments; keeping the current course lists")
+            return
+        wanted = {d.strip().upper() for d in args.departments.split(",") if d.strip()}
+        total = 0
+        for department in departments:
+            dept = department["code"]
+            if wanted and dept not in wanted:
                 continue
-            log.info("Loaded %d %s courses from the catalog", store.save_catalog(dept, courses), dept)
+            courses = fetch_catalog(fetcher, dept, department["slug"])
+            if not courses:
+                log.warning("Couldn't read the %s course catalog; keeping its current course list", dept)
+                continue
+            total += store.save_department(department, courses)
+        log.info("Loaded %d courses in %d departments from the catalog", total, len(wanted or departments))
 
     if args.catalog_only:
         if store:
             load_catalog()
+            store.count_syllabi()
         return 0
 
     if not args.index_only:
@@ -203,6 +214,7 @@ def main(argv=None):
         log.info("Made %d syllabi searchable", store.index_text(reindex=args.reindex))
         log.info("Filled in full professor names on %d syllabi", store.resolve_names())
         log.info("Made PDF copies of %d HTML syllabi", store.make_pdfs())
+        log.info("%d departments have syllabi", store.count_syllabi())
     if store and not args.index_only:
         store.mark_scraped()
     return 0

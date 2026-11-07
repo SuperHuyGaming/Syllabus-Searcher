@@ -9,6 +9,24 @@ const courses = [
   { code: 'CS483', display: 'CS 483', title: 'Analysis of Algorithms', hasSyllabi: true },
 ];
 
+const departments = [
+  { code: 'CS', name: 'Computer Science', courses: 3, withSyllabi: 2 },
+  { code: 'MATH', name: 'Mathematics', courses: 1, withSyllabi: 0 },
+];
+const coursesByDept = {
+  CS: courses,
+  MATH: [{ code: 'MATH113', display: 'MATH 113', title: 'Analytic Geometry and Calculus I', hasSyllabi: false }],
+};
+
+// Same matching as the API: a code prefix ("math 1") or every word in the title.
+function findCourses(q) {
+  const code = q.replace(/[\s-]+/g, '').toUpperCase();
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  return Object.values(coursesByDept)
+    .flat()
+    .filter((c) => c.code.startsWith(code) || words.every((w) => c.title.toLowerCase().includes(w)));
+}
+
 // In the official catalog but no syllabus on file yet.
 const cs105 = {
   code: 'CS105',
@@ -130,7 +148,15 @@ export async function mockApi(page, { onUpload } = {}) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
-    if (path === '/api/courses') return route.fulfill(json({ dept: 'CS', courses }));
+    if (path === '/api/departments') return route.fulfill(json({ departments }));
+    if (path === '/api/courses') {
+      const q = url.searchParams.get('q');
+      if (q !== null) return route.fulfill(json({ query: q, courses: findCourses(q.trim()) }));
+      const dept = (url.searchParams.get('dept') || 'CS').toUpperCase();
+      const name = departments.find((d) => d.code === dept)?.name;
+      if (!name) return route.fulfill(json({ error: `${dept} isn't a GMU department` }, 404));
+      return route.fulfill(json({ dept, name, courses: coursesByDept[dept] }));
+    }
     if (path === '/api/courses/CS310') return route.fulfill(json(cs310));
     if (path === '/api/courses/CS105') return route.fulfill(json(cs105));
     if (path.startsWith('/api/courses/')) return route.fulfill(json({ error: 'No syllabi found for CS999' }, 404));

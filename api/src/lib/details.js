@@ -1,6 +1,5 @@
 // Validates the course/term/section/professor fields shared by student uploads
 // and admin edits, so both accept and normalize the same values.
-const config = require('../config');
 const { HttpError } = require('./http');
 const { parseTerm, normalizeCourse } = require('./terms');
 
@@ -10,9 +9,17 @@ const INSTRUCTOR = /^[\p{L} .,'-]{2,80}$/u;
 function parseCourse(input) {
   const code = normalizeCourse(input);
   if (!code) throw new HttpError(400, 'Course code should look like "CS 310"');
-  const dept = code.match(/^[A-Z]+/)[0];
-  if (!config.departments.includes(dept)) throw new HttpError(400, `Only ${config.departments.join(', ')} courses for now`);
   return code;
+}
+
+const deptOf = (code) => code.match(/^[A-Z]+/)[0];
+
+// A new syllabus must be for a GMU department (repos/departments.js), so a typo
+// like "CD 310" doesn't start a department of its own.
+async function requireDepartment(departments, code) {
+  const dept = deptOf(code);
+  if (!(await departments.exists(dept))) throw new HttpError(400, `${dept} isn't a GMU department. Check the course code.`);
+  return dept;
 }
 
 function parseTermInput(input) {
@@ -57,4 +64,4 @@ function parseReviewDetails(input) {
   return { ...parseDetails({ ...input, instructor: instructors[0] }), instructor: instructors.join('; '), instructors };
 }
 
-module.exports = { parseCourse, parseTermInput, parseSection, parseInstructor, parseInstructors, parseDetails, parseReviewDetails };
+module.exports = { parseCourse, requireDepartment, deptOf, parseTermInput, parseSection, parseInstructor, parseInstructors, parseDetails, parseReviewDetails };

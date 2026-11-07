@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { displayCourse, normalizeCourse } from './courses';
+import { deptOf, deptOfText, displayCourse, normalizeCourse } from './courses';
 
 describe('normalizeCourse', () => {
   test('accepts spaced, dashed and lowercase codes', () => {
@@ -17,4 +17,20 @@ describe('normalizeCourse', () => {
 
 test('displayCourse adds the space back', () => {
   expect(displayCourse('CS584')).toBe('CS 584');
+});
+
+describe('departments', () => {
+  test('deptOf reads the letters of a stored code', () => {
+    expect(deptOf('CS310')).toBe('CS');
+    expect(deptOf('MATH113')).toBe('MATH');
+  });
+
+  test('deptOfText reads a half-typed code', () => {
+    expect(deptOfText('math 2')).toBe('MATH');
+    expect(deptOfText('cs')).toBe('CS');
+    expect(deptOfText('CS-310')).toBe('CS');
+    expect(deptOfText('Data Structures')).toBeNull();
+    expect(deptOfText('c')).toBeNull();
+    expect(deptOfText('')).toBeNull();
+  });
 });
