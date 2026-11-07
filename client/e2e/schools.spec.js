@@ -88,3 +88,18 @@ test('GMU addresses stay as they were', async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: /All Computer Science courses/ })).toContainText('2 of 3 have syllabi');
 });
+
+test('the header fits the longest school name without clipping it, and a made-up school falls back to GMU', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/?school=gatech');
+  const picker = schoolPicker(page);
+  await expect(picker).toHaveText('Georgia Tech');
+  const clipped = await picker.evaluate((el) => el.scrollWidth > el.clientWidth);
+  expect(clipped).toBe(false);
+  await expect(page.getByRole('link', { name: 'Syllabus Searcher home' })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+
+  await page.goto('/?school=nope');
+  await expect(picker).toHaveText('GMU');
+});

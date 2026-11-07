@@ -77,7 +77,7 @@ export function SchoolPicker() {
       }}
       slotProps={{ htmlInput: { 'aria-label': 'School' } }}
       sx={{
-        minWidth: 0,
+        flexShrink: 0,
         '& .MuiInputBase-root': { color: 'inherit', fontWeight: 600 },
         '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.5)' },
         '& .MuiSvgIcon-root': { color: 'inherit' },
