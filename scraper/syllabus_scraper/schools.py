@@ -2,7 +2,8 @@
 
 `key` is the school's prefix in course codes ("unc:COMP110"), except GMU, the first
 school, whose codes stay bare ("CS310"; api/src/lib/terms.js). `catalog` is the
-CourseLeaf A-Z list of departments (syllabus_scraper/catalog.py reads it).
+CourseLeaf A-Z list of departments (syllabus_scraper/catalog.py reads it). `city` is shown
+under the name in the home page's school search.
 Only GMU has a syllabus archive to scrape; the others start with their catalog,
 and their syllabi come from student uploads.
 
@@ -18,24 +19,28 @@ SCHOOLS = [
         "key": "gmu",
         "name": "George Mason University",
         "short": "GMU",
+        "city": "Fairfax, VA",
         "catalog": "https://catalog.gmu.edu/courses/",
     },
     {
         "key": "gatech",
         "name": "Georgia Institute of Technology",
         "short": "Georgia Tech",
+        "city": "Atlanta, GA",
         "catalog": "https://catalog.gatech.edu/coursesaz/",
     },
     {
         "key": "odu",
         "name": "Old Dominion University",
         "short": "ODU",
+        "city": "Norfolk, VA",
         "catalog": "https://catalog.odu.edu/courses/",
     },
     {
         "key": "unc",
         "name": "University of North Carolina at Chapel Hill",
         "short": "UNC",
+        "city": "Chapel Hill, NC",
         "catalog": "https://catalog.unc.edu/courses/",
     },
 ]

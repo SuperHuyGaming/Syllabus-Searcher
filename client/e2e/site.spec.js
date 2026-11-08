@@ -5,41 +5,63 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
-test('search a course code and open its page', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Find a syllabus' })).toBeVisible();
+const box = (page, school = 'GMU') => page.getByLabel(`Subject, course or professor at ${school}`);
 
-  await page.getByLabel('Course code or name').fill('cs 310');
+test('a first visit asks for the school, then searches courses there', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Enter your school to find a syllabus' })).toBeVisible();
+
+  await page.getByLabel('Your school').fill('mason');
+  await expect(page.getByRole('option')).toHaveText([/George Mason University.*Fairfax, VA/]);
+  await page.getByRole('option', { name: /George Mason University/ }).click();
+
+  await expect(page.getByRole('heading', { name: 'Find a syllabus at George Mason University' })).toBeVisible();
+  await expect(box(page)).toBeFocused();
+  await box(page).fill('cs 310');
   await page.getByRole('option', { name: /CS 310/ }).click();
 
   await expect(page).toHaveURL(/\/courses\/CS310$/);
   await expect(page.getByRole('heading', { name: 'CS 310' })).toBeVisible();
+
+  // The school is remembered, so the next visit starts on the subject search.
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Find a syllabus at George Mason University' })).toBeVisible();
 });
 
 test('search matches course titles too', async ({ page }) => {
-  await page.goto('/');
-  await page.getByLabel('Course code or name').fill('algorithms');
+  await page.goto('/?school=gmu');
+  await box(page).fill('algorithms');
   await expect(page.getByRole('option')).toHaveText([/CS 483/]);
 });
 
 test('search finds courses in other departments', async ({ page }) => {
-  await page.goto('/');
-  await page.getByLabel('Course code or name').fill('calculus');
+  await page.goto('/?school=gmu');
+  await box(page).fill('calculus');
   await expect(page.getByRole('option')).toHaveText([/MATH 113.*no syllabi yet/]);
 });
 
-test('home lists CS by default and switches department from the picker', async ({ page }) => {
-  await page.goto('/');
+test('home lists CS by default and switches subject from the search box', async ({ page }) => {
+  await page.goto('/?school=gmu');
   await expect(page.getByRole('heading', { name: /All Computer Science courses/ })).toContainText('2 of 3 have syllabi');
 
-  await page.getByLabel('Department').click();
-  await expect(page.getByRole('listbox')).toContainText(/Have syllabi.*No syllabi yet/);
-  await page.getByRole('option', { name: /Mathematics \(MATH\)/ }).click();
+  // Clicking the empty box lists subjects, the ones with syllabi first.
+  await box(page).click();
+  await expect(page.getByRole('listbox')).toContainText(/Subjects.*Computer Science.*2 with syllabi.*Mathematics.*no syllabi yet/);
+  await box(page).fill('math');
+  await page.getByRole('option', { name: /^Mathematics/ }).click();
 
   await expect(page).toHaveURL(/\/\?dept=MATH$/);
   await expect(page.getByRole('heading', { name: /All Mathematics courses/ })).toContainText('0 of 1 have syllabi');
   await page.getByRole('link', { name: /MATH 113/ }).click();
   await expect(page).toHaveURL(/\/courses\/MATH113$/);
+});
+
+test('the search box finds professors by name', async ({ page }) => {
+  await page.goto('/?school=gmu');
+  await box(page).fill('david');
+  await expect(page.getByRole('listbox')).toContainText('Professors');
+  await page.getByRole('option', { name: /Gonzalez Samudio, David/ }).click();
+  await expect(page).toHaveURL(/\/professors\/gonzalez-samudio-david$/);
 });
 
 test('a course page links back to its department', async ({ page }) => {
