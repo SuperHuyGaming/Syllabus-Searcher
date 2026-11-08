@@ -13,7 +13,7 @@ const { getDb } = require('./files');
 const { displayCourse, withoutSchool, schoolOf, DEFAULT_SCHOOL } = require('../lib/terms');
 
 const SEARCH_LIMIT = 20;
-const GMU = { key: DEFAULT_SCHOOL, name: 'George Mason University', short: 'GMU', departments: 0, courses: 0 };
+const GMU = { key: DEFAULT_SCHOOL, name: 'George Mason University', short: 'GMU', city: 'Fairfax, VA', departments: 0, courses: 0 };
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -38,10 +38,11 @@ function createDepartments({ db } = {}) {
     // Every school, GMU first, then A to Z. GMU is listed even before its catalog loads.
     async schools() {
       const docs = await (await collection('schools')).find({}).toArray();
-      const schools = docs.map(({ _id, name, short, departments, courses }) => ({
+      const schools = docs.map(({ _id, name, short, city, departments, courses }) => ({
         key: _id,
         name: name || _id,
         short: short || name || _id,
+        city: city || '',
         departments: departments || 0,
         courses: courses || 0,
       }));

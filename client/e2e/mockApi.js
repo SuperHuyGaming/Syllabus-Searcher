@@ -10,9 +10,9 @@ const courses = [
 ];
 
 const schools = [
-  { key: 'gmu', name: 'George Mason University', short: 'GMU', departments: 2, courses: 4 },
-  { key: 'unc', name: 'University of North Carolina at Chapel Hill', short: 'UNC', departments: 2, courses: 2 },
-  { key: 'gatech', name: 'Georgia Institute of Technology', short: 'Georgia Tech', departments: 0, courses: 0 },
+  { key: 'gmu', name: 'George Mason University', short: 'GMU', city: 'Fairfax, VA', departments: 2, courses: 4 },
+  { key: 'unc', name: 'University of North Carolina at Chapel Hill', short: 'UNC', city: 'Chapel Hill, NC', departments: 2, courses: 2 },
+  { key: 'gatech', name: 'Georgia Institute of Technology', short: 'Georgia Tech', city: 'Atlanta, GA', departments: 0, courses: 0 },
 ];
 
 // GMU keys are bare ("CS"); other schools' carry the school ("unc:COMP"), like the API.
