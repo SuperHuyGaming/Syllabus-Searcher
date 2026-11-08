@@ -113,7 +113,7 @@ test('unknown course offers an upload', async ({ page }) => {
   await page.goto('/courses/CS999');
   await expect(page.getByText('No syllabi found for CS999')).toBeVisible();
   await page.getByRole('main').getByRole('link', { name: 'Upload', exact: true }).click();
-  await expect(page.getByLabel('Course code')).toHaveValue('CS999');
+  await expect(page.getByLabel('Course code')).toHaveValue('CS 999');
 });
 
 test('professor name on a course links to their page', async ({ page }) => {
@@ -161,7 +161,8 @@ test('a catalog course with no syllabi shows its details and asks for one', asyn
   await expect(page.getByText('No syllabi for CS 105 yet.')).toBeVisible();
   await expect(page.getByLabel('Term')).toHaveCount(0);
   await page.getByRole('link', { name: 'Upload' }).last().click();
-  await expect(page).toHaveURL(/\/upload\?course=CS105$/);
+  await expect(page).toHaveURL(/\/upload\?course=CS\+105$/);
+  await expect(page.getByLabel('Course code')).toHaveValue('CS 105');
 });
 
 test('a syllabus posted as a web page also offers a PDF', async ({ page }) => {

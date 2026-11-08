@@ -79,7 +79,7 @@ function fakes() {
         { code: 'CS', name: 'Computer Science', courses: 3, withSyllabi: 2 },
         { code: 'MATH', name: 'Mathematics', courses: 1, withSyllabi: 0 },
       ]),
-      exists: jest.fn(async (dept) => ['CS', 'MATH', 'SWE'].includes(dept)),
+      exists: jest.fn(async (dept) => ['CS', 'MATH', 'SWE', 'unc:COMP'].includes(dept)),
       get: jest.fn(async (dept) => ({ CS: { code: 'CS', name: 'Computer Science' }, MATH: { code: 'MATH', name: 'Mathematics' } })[dept] || null),
       courses: jest.fn(async (dept) =>
         dept === 'CS'
@@ -99,6 +99,12 @@ function fakes() {
         { code: 'MATH113', dept: 'MATH', display: 'MATH 113', title: 'Analytic Geometry and Calculus I' },
       ]),
       addCourseWithSyllabi: jest.fn().mockResolvedValue(),
+      schools: jest.fn().mockResolvedValue([
+        { key: 'gmu', name: 'George Mason University', short: 'GMU' },
+        { key: 'unc', name: 'University of North Carolina at Chapel Hill', short: 'UNC' },
+      ]),
+      schoolExists: jest.fn(async (key) => ['gmu', 'unc'].includes(key)),
+      schoolName: jest.fn(async (key) => ({ gmu: 'GMU', unc: 'UNC' })[key] || key.toUpperCase()),
     },
     files: {
       save: jest.fn().mockResolvedValue(FILE_ID),
@@ -182,7 +188,7 @@ describe('catalog routes', () => {
     const deps = fakes();
     const res = await createApp(deps)(event('GET', '/api/courses', { query: { q: ' calc ' } }));
     expect(res.statusCode).toBe(200);
-    expect(deps.departments.search).toHaveBeenCalledWith('calc');
+    expect(deps.departments.search).toHaveBeenCalledWith('calc', 'gmu');
     expect(parse(res).courses.map((c) => [c.code, c.hasSyllabi])).toEqual([
       ['CS310', true],
       ['MATH113', false],
@@ -207,6 +213,59 @@ describe('catalog routes', () => {
     expect(parse(res)).toMatchObject({ code: 'MATH113', title: 'Analytic Geometry and Calculus I', credits: '4', offerings: [] });
   });
 
+  test("lists schools, and one school's departments", async () => {
+    const deps = fakes();
+    expect(parse(await createApp(deps)(event('GET', '/api/schools'))).schools.map((s) => s.key)).toEqual(['gmu', 'unc']);
+    const res = await createApp(deps)(event('GET', '/api/departments', { query: { school: 'unc' } }));
+    expect(res.statusCode).toBe(200);
+    expect(deps.departments.list).toHaveBeenCalledWith('unc');
+    expect((await createApp(deps)(event('GET', '/api/departments', { query: { school: 'nope' } }))).statusCode).toBe(404);
+  });
+
+  test("lists another school's department by bare code or full key", async () => {
+    const deps = fakes();
+    deps.catalog.listCourses.mockResolvedValue([]);
+    const bare = await createApp(deps)(event('GET', '/api/courses', { query: { school: 'unc', dept: 'comp' } }));
+    expect(bare.statusCode).toBe(200);
+    expect(parse(bare)).toMatchObject({ dept: 'unc:COMP', display: 'COMP', school: 'unc' });
+    expect(deps.catalog.listCourses).toHaveBeenCalledWith('unc:COMP');
+    const full = await createApp(deps)(event('GET', '/api/courses', { query: { dept: 'unc:COMP' } }));
+    expect(parse(full).dept).toBe('unc:COMP');
+    // GMU's CS is not UNC's.
+    const wrong = await createApp(deps)(event('GET', '/api/courses', { query: { school: 'unc', dept: 'CS' } }));
+    expect(wrong.statusCode).toBe(404);
+    expect(parse(wrong).error).toBe("CS isn't a department at UNC");
+  });
+
+  test('course search and full-text search stay inside the chosen school', async () => {
+    const deps = fakes();
+    await createApp(deps)(event('GET', '/api/courses', { query: { q: 'calc', school: 'unc' } }));
+    expect(deps.departments.search).toHaveBeenCalledWith('calc', 'unc');
+    await createApp(deps)(event('GET', '/api/search', { query: { q: 'java', school: 'unc' } }));
+    expect(deps.search.search).toHaveBeenCalledWith('java', 'unc');
+  });
+
+  test("a course page says which school it's from", async () => {
+    const deps = fakes();
+    deps.catalog.getCourse.mockResolvedValue({ code: 'unc:COMP110', title: 'Intro', offerings: [] });
+    const res = await createApp(deps)(event('GET', '/api/courses/unc%3ACOMP%20110'));
+    expect(res.statusCode).toBe(200);
+    expect(deps.catalog.getCourse).toHaveBeenCalledWith('unc:COMP110');
+    expect(parse(res)).toMatchObject({ school: 'unc', dept: 'unc:COMP' });
+  });
+
+  test('professors are listed per school', async () => {
+    const deps = fakes();
+    deps.catalog.listOfferings = jest.fn().mockResolvedValue([
+      { code: 'CS310', termKey: '2024-3', section: '001', instructors: ['Smith, J'], fileId: FILE_ID },
+      { code: 'unc:COMP110', termKey: '2024-3', section: '001', instructors: ['Smith, J'], fileId: 'b'.repeat(24) },
+    ]);
+    const gmu = parse(await createApp(deps)(event('GET', '/api/professors')));
+    const unc = parse(await createApp(deps)(event('GET', '/api/professors', { query: { school: 'unc' } })));
+    expect(gmu.professors[0].courses).toEqual(['CS310']);
+    expect(unc.professors[0].courses).toEqual(['unc:COMP110']);
+  });
+
   test('404s for unknown courses', async () => {
     const res = await createApp(fakes())(event('GET', '/api/courses/CS999'));
     expect(res.statusCode).toBe(404);
@@ -229,7 +288,7 @@ describe('catalog routes', () => {
     deps.search = { search: jest.fn().mockResolvedValue([{ fileId: FILE_ID, codes: ['CS310'], snippet: 'uses Java' }]) };
     const res = await createApp(deps)(event('GET', '/api/search', { query: { q: ' java ' } }));
     expect(res.statusCode).toBe(200);
-    expect(deps.search.search).toHaveBeenCalledWith('java');
+    expect(deps.search.search).toHaveBeenCalledWith('java', 'gmu');
     expect(parse(res).results).toHaveLength(1);
   });
 
@@ -362,13 +421,20 @@ describe('uploads', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  test("an upload for another school keeps the school in its course code", async () => {
+    const deps = fakes();
+    const res = await createApp(deps)(event('POST', '/api/uploads', { query: { ...query, course: 'COMP 110', school: 'unc' }, body: realPdf }));
+    expect(res.statusCode).toBe(201);
+    expect(deps.uploads.create).toHaveBeenCalledWith(expect.objectContaining({ course_code: 'unc:COMP110' }));
+  });
+
   test('takes uploads for any GMU department, not made-up ones', async () => {
     const deps = fakes();
     const math = await createApp(deps)(event('POST', '/api/uploads', { query: { ...query, course: 'MATH 113' }, body: realPdf }));
     expect(math.statusCode).toBe(201);
     const made = await createApp(deps)(event('POST', '/api/uploads', { query: { ...query, course: 'XYZ 113' }, body: realPdf }));
     expect(made.statusCode).toBe(400);
-    expect(parse(made).error).toMatch(/XYZ isn't a GMU department/);
+    expect(parse(made).error).toMatch(/XYZ isn't a department at GMU/);
   });
 
   test('rate limits by IP', async () => {
@@ -505,6 +571,15 @@ describe('admin', () => {
     const res = await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good') }));
     expect(res.statusCode).toBe(400);
     expect(deps.files.move).not.toHaveBeenCalled();
+  });
+
+  test("an admin's bare course code is read at the upload's own school", async () => {
+    const deps = fakes();
+    deps.uploads.get.mockResolvedValue({ id: UPLOAD_ID, status: 'pending', course_code: 'unc:COMP110', term_key: '2024-3', section: '001', instructor: 'Smith, J', file_id: FILE_ID });
+    const body = JSON.stringify({ course: 'COMP 110', title: 'Intro to Programming' });
+    const res = await createApp(deps)(event('POST', `/api/admin/uploads/${UPLOAD_ID}/approve`, { headers: auth('good'), body }));
+    expect(res.statusCode).toBe(200);
+    expect(deps.catalog.putOffering).toHaveBeenCalledWith(expect.objectContaining({ dept: 'unc:COMP', code: 'unc:COMP110' }));
   });
 
   test("a catalog course's first syllabus takes the catalog title and counts for its department", async () => {

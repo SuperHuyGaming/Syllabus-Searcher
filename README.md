@@ -1,6 +1,6 @@
 # GMU Syllabus Searcher
 
-Look up any GMU course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed. Most syllabi so far are Computer Science, from the CS department's old syllabus page; other departments fill in through student uploads.
+Look up any GMU course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed. Most syllabi so far are Computer Science, from the CS department's old syllabus page; other departments fill in through student uploads. Other schools are listed too (Georgia Tech, Old Dominion, UNC Chapel Hill): pick one in the header to browse its course catalog and upload its syllabi.
 
 - **By course**: every course in GMU's official catalog (about 170 departments), with credits, description and prerequisites. Search a code or title across departments, or pick a department on the home page (`/?dept=MATH`), then filter syllabi by term and professor. Courses with no syllabus yet ask students to upload one.
 - **By professor**: search by first or last name and see every course and term they have a syllabus for. Full names are read from the syllabi when the department listing only gives an initial.
@@ -85,6 +85,20 @@ Courses with two or more summarized syllabi also get an "Across all syllabi" car
 The course list comes from GMU's official catalog: the A-Z list at `catalog.gmu.edu/courses/` gives every department, and each department's page (e.g. `catalog.gmu.edu/courses/cs/`) its courses with title, credits, description and prerequisites. Every scrape reloads it into MongoDB (`departments`, `courses`), or run just that step with `docker compose run --rm scraper --catalog-only` (add `--departments CS,MATH` for a few). It lives in MongoDB rather than DynamoDB because GMU has over ten thousand courses and the DynamoDB table's 5 write units would take hours to load them. The API merges the catalog with the DynamoDB courses that have syllabi.
 
 Only the CS department ever published its syllabi, so every other department's syllabi come from uploads. The CS listing also carries cross-listed SWE and ISA courses, which are kept.
+
+### Other schools
+
+The schools and their catalogs are listed in `scraper/syllabus_scraper/schools.py`. They all publish with CourseLeaf, the same system as `catalog.gmu.edu`, so one parser reads them (`syllabus_scraper/catalog.py` handles its three page layouts). The weekly scrape loads every school's catalog into MongoDB (`schools`, plus a `school` field on `departments` and `courses`); none has a syllabus archive, so their syllabi come from uploads.
+
+Course codes carry their school everywhere they're stored or linked: GMU's stay bare (`CS310`, department `CS`), so nothing saved before other schools existed had to change, and every other school's are prefixed (`unc:COMP110`, department `unc:COMP`, page `/courses/unc:COMP110`). `api/src/lib/terms.js` and `client/src/lib/courses.js` read and write them. Pages take `?school=unc`; the header's picker sets it and the browser remembers the last pick. Professors, full-text search and the admin's professor merge are per school, since the same name at two schools is two people.
+
+To add a school with a CourseLeaf catalog, add it to `schools.py`, then check that it parses without writing anything:
+
+```bash
+cd scraper && python scrape.py --catalog-only --dry-run --schools <key> --departments <CODE>
+```
+
+Course numbers must have 3 or 4 digits, so 2-digit ones (UNC's first-year seminars, e.g. COMP 50) are skipped.
 
 The CS department used to list syllabi at `cs.gmu.edu/syllabi/`, a table of course, section, title and instructor linking to files under `/media/syllabi/<Term>/`. Those pages and files started returning 404 in late 2025, so the scraper falls back to the Internet Archive's copies.
 

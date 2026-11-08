@@ -72,4 +72,22 @@ describe('renameProfessor', () => {
     await expect(renameProfessor(fakes([]), 'Yu, L', '<script>')).rejects.toThrow(/instructor/);
     await expect(renameProfessor(fakes([]), '', 'Yu, Craig')).rejects.toThrow(/current name/);
   });
+
+  test("with a school, only that school's syllabi change", async () => {
+    const both = () => [
+      offering('CS310', '2024-3', 'Fall 2024', ['Smith, J']),
+      offering('unc:COMP110', '2024-3', 'Fall 2024', ['Smith, J']),
+    ];
+    const deps = fakes(both());
+    const gmu = await renameProfessor(deps, 'Smith, J', 'Smith, Jane', { school: 'gmu', apply: true });
+    expect(gmu.map((c) => c.code)).toEqual(['CS310']);
+    expect(deps.catalog.updateOffering).toHaveBeenCalledTimes(1);
+
+    const unc = await renameProfessor(fakes(both()), 'Smith, J', 'Smith, Jo', { school: 'unc' });
+    expect(unc.map((c) => c.code)).toEqual(['unc:COMP110']);
+
+    // The command-line script gives no school and renames everywhere.
+    const all = await renameProfessor(fakes(both()), 'Smith, J', 'Smith, Jo');
+    expect(all).toHaveLength(2);
+  });
 });

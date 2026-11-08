@@ -4,8 +4,17 @@ import { AppBar, Box, Button, Container, Link, Toolbar, Typography } from '@mui/
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { api } from '../api';
 import { updatedLabel } from '../lib/status';
+import { SchoolPicker, SchoolProvider } from './School';
 
 export default function Layout() {
+  return (
+    <SchoolProvider>
+      <Page />
+    </SchoolProvider>
+  );
+}
+
+function Page() {
   // Nothing is shown until it loads, or if it fails; the rest of the page doesn't wait for it.
   const { data: status } = useQuery({ queryKey: ['status'], queryFn: api.status });
   const updated = updatedLabel(status?.lastUpdated);
@@ -14,19 +23,31 @@ export default function Layout() {
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" elevation={0}>
         <Toolbar sx={{ gap: 1 }}>
-          <MenuBookIcon aria-hidden />
+          {/* On a phone the name gives its room to the school picker; the book icon still links home. */}
           <Typography
             component={RouterLink}
             to="/"
             variant="h6"
             noWrap
-            sx={{ flexGrow: 1, color: 'inherit', textDecoration: 'none', fontWeight: 700, fontSize: { xs: 16, sm: 20 } }}
+            aria-label="Syllabus Searcher home"
+            sx={{
+              flexGrow: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              minWidth: 0,
+              color: 'inherit',
+              textDecoration: 'none',
+              fontWeight: 700,
+              fontSize: 20,
+            }}
           >
+            <MenuBookIcon aria-hidden />
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-              GMU{' '}
+              Syllabus Searcher
             </Box>
-            Syllabus Searcher
           </Typography>
+          <SchoolPicker />
           <Button component={RouterLink} to="/professors" color="inherit">
             Professors
           </Button>
@@ -52,7 +73,7 @@ export default function Layout() {
 
       <Box component="footer" sx={{ py: 3, textAlign: 'center', color: 'text.secondary', fontSize: 14 }}>
         {updated && <>Last updated {updated}. </>}
-        Computer Science syllabi only for now. Not affiliated with George Mason University.{' '}
+        Not affiliated with any of the schools listed.{' '}
         <Link component={RouterLink} to="/admin" color="inherit">
           Admin
         </Link>

@@ -5,16 +5,17 @@ import { Alert, Box, Button, Card, CardContent, Link, Skeleton, Stack, TextField
 import DescriptionIcon from '@mui/icons-material/Description';
 import { api, syllabusUrl } from '../api';
 import Highlight, { searchTerms } from '../components/Highlight';
-
-const display = (code) => code.replace(/^([A-Z]+)/, '$1 ');
+import { useSchool } from '../components/School';
+import { displayCourse as display } from '../lib/courses';
 
 export default function Search() {
   const [params, setParams] = useSearchParams();
   const q = params.get('q') || '';
   const [draft, setDraft] = useState(q);
+  const { school } = useSchool();
   const { data, isFetching, error } = useQuery({
-    queryKey: ['search', q],
-    queryFn: () => api.search(q),
+    queryKey: ['search', school.key, q],
+    queryFn: () => api.search(q, school.key),
     enabled: q.trim().length >= 2,
   });
   const terms = searchTerms(q);
@@ -25,7 +26,7 @@ export default function Search() {
         Search inside syllabi
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 3 }}>
-        Find syllabi that mention a language, textbook, tool or policy. Use quotes for an exact phrase.
+        Find {school.short} syllabi that mention a language, textbook, tool or policy. Use quotes for an exact phrase.
       </Typography>
 
       <Box

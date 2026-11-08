@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from syllabus_scraper.catalog import parse_catalog, parse_departments
@@ -39,3 +40,62 @@ def test_reads_each_department_once_from_the_a_to_z_list():
     assert oscm["name"] == "Operations & Supply Chain Management"
     assert oscm["slug"] == "operations--supply-chain-management"
     assert departments[3]["name"] == "Law-Grad Law"
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def fixture(name):
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_odu_lists_departments_as_code_dash_name_without_an_a_to_z_box():
+    departments = parse_departments(fixture("catalog_odu_index.html"))
+    assert [d["code"] for d in departments] == ["AAST", "ACCT", "AI", "AL"]
+    assert departments[0] == {"code": "AAST", "name": "African-American Studies", "slug": "aast"}
+
+
+def test_georgia_tech_departments_live_under_coursesaz():
+    departments = parse_departments(fixture("catalog_gatech_index.html"), prefix="/coursesaz/")
+    assert [d["slug"] for d in departments] == ["acct", "ae", "as", "apph"]
+    assert parse_departments(fixture("catalog_gatech_index.html")) == []
+
+
+def test_georgia_tech_reads_the_whole_heading_with_four_digit_numbers():
+    courses = parse_catalog(fixture("catalog_gatech_cs.html"), dept="CS")
+    assert [c["code"] for c in courses] == ["CS1100", "CS1171", "CS1301", "CS1301R"]
+    assert courses[0]["title"] == "Pathways in Computing"
+    assert courses[0]["credits"] == "1"
+    assert courses[2]["credits"] == "3"
+    assert courses[0]["description"].startswith("Small group discussions")
+
+
+def test_unc_reads_detail_spans_and_skips_two_digit_seminars():
+    courses = parse_catalog(fixture("catalog_unc_comp.html"), dept="COMP")
+    assert len(courses) == 2  # "COMP 50" first-year seminar is skipped: codes have 3-4 digits
+    first = courses[0]
+    assert re.fullmatch(r"COMP\d{3}[A-Z]?", first["code"])
+    assert first["title"] and not first["title"].endswith(".")
+    assert re.fullmatch(r"[\d.-]+", first["credits"])
+    assert first["description"]
+
+
+def test_odu_reads_xref_codes_and_credit_hours_in_parentheses():
+    courses = parse_catalog(fixture("catalog_odu_cs.html"), dept="CS")
+    assert courses[0]["code"] == "CS112"
+    assert courses[0]["title"] == "Information Literacy for Former Engineering Majors"
+    assert courses[0]["credits"] == "1"
+    assert courses[0]["description"].startswith("The objective of this course")
+
+
+def test_department_names_in_capitals_read_like_the_others():
+    page = '<div id="atozindex"><a href="/courses/comp/">COMPUTER SCIENCE (COMP)</a>' \
+        '<a href="/courses/aaad/">AFRICAN, AFRICAN AMERICAN, AND DIASPORA STUDIES (AAAD)</a>' \
+        '<a href="/courses/aaas/">AFRICAN-AMERICAN STUDIES (AAAS)</a>'         '<a href="/courses/cs/">Computer Science and ICT (CS)</a></div>'
+    names = [d["name"] for d in parse_departments(page)]
+    assert names == [
+        "Computer Science",
+        "African, African American, and Diaspora Studies",
+        "African-American Studies",
+        "Computer Science and ICT",
+    ]

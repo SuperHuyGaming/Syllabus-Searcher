@@ -27,7 +27,7 @@ const {
   DeleteCommand,
 } = require('@aws-sdk/lib-dynamodb');
 const config = require('../config');
-const { displayCourse } = require('../lib/terms');
+const { displayCourse, deptOf } = require('../lib/terms');
 
 const rollupRecord = ({ rollup, provider, model, generatedAt, fileIds }) => ({
   rollup,
@@ -86,7 +86,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
   return {
     // Which of these course codes have syllabi (a Set), for course search results.
     async coursesWithSyllabi(codes) {
-      const keys = [...new Set(codes)].map((code) => ({ PK: `DEPT#${code.match(/^[A-Z]+/)[0]}`, SK: `COURSE#${code}` }));
+      const keys = [...new Set(codes)].map((code) => ({ PK: `DEPT#${deptOf(code)}`, SK: `COURSE#${code}` }));
       const found = new Set();
       for (let i = 0; i < keys.length; i += 100) {
         let batch = keys.slice(i, i + 100);
@@ -263,7 +263,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
         })
       );
       if (left.length === 0) {
-        const dept = offering.code.match(/^[A-Z]+/)[0];
+        const dept = deptOf(offering.code);
         const listKey = { PK: `DEPT#${dept}`, SK: offering.PK };
         const meta = await this.getCourseMeta(offering.code);
         if (meta?.inCatalog) {

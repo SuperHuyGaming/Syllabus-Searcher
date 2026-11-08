@@ -78,3 +78,45 @@ def test_count_syllabi_counts_courses_not_files_per_department():
     assert departments.calls[0] == ("many", {"_id": {"$nin": ["CS", "SWE"]}}, {"$set": {"withSyllabi": 0}})
     counts = {call[1]["_id"]: call[2]["$set"]["withSyllabi"] for call in departments.calls[1:]}
     assert counts == {"CS": 2, "SWE": 1}
+
+
+class FakeCatalog(FakeCollection):
+    def create_index(self, *args, **kwargs):
+        pass
+
+    def bulk_write(self, writes, ordered=True):
+        self.calls.extend(("write", w._filter, w._doc) for w in writes)
+
+    def delete_many(self, *args):
+        self.calls.append(("delete", *args))
+
+
+def test_other_schools_get_prefixed_keys_and_gmu_stays_bare():
+    store = Store.__new__(Store)
+    store.db = {"courses": FakeCatalog(), "departments": FakeCatalog()}
+    course = {"code": "COMP110", "title": "Intro", "credits": "3", "description": "", "prereqs": ""}
+
+    assert store.save_department("unc", {"code": "COMP", "name": "Computer Science"}, [course]) == 1
+    _, filt, doc = store.db["courses"].calls[0]
+    assert filt == {"_id": "unc:COMP110"}
+    assert doc["$set"]["dept"] == "unc:COMP" and doc["$set"]["school"] == "unc"
+    assert store.db["courses"].calls[1] == ("delete", {"dept": "unc:COMP", "_id": {"$nin": ["unc:COMP110"]}})
+    assert store.db["departments"].calls[0][1] == {"_id": "unc:COMP"}
+
+    store.db = {"courses": FakeCatalog(), "departments": FakeCatalog()}
+    store.save_department("gmu", {"code": "CS", "name": "Computer Science"}, [{**course, "code": "CS310"}])
+    _, filt, doc = store.db["courses"].calls[0]
+    assert filt == {"_id": "CS310"} and doc["$set"]["dept"] == "CS" and doc["$set"]["school"] == "gmu"
+
+
+def test_count_syllabi_keeps_schools_apart():
+    store = Store.__new__(Store)
+    departments = FakeCollection()
+    store.db = {"departments": departments}
+    store.offerings_by_file = lambda: {"f1": [{"code": "CS310"}], "f2": [{"code": "unc:COMP110"}, {"code": "unc:COMP210"}]}
+    assert store.count_syllabi() == 2
+    upserts = {call[1]["_id"]: call[2] for call in departments.calls[1:]}
+    assert upserts["CS"]["$set"]["withSyllabi"] == 1
+    assert upserts["unc:COMP"]["$set"]["withSyllabi"] == 2
+    assert upserts["unc:COMP"]["$setOnInsert"] == {"school": "unc", "name": "COMP", "courses": 0}
+    assert upserts["CS"]["$setOnInsert"]["school"] == "gmu"

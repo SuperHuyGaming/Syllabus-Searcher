@@ -1,16 +1,17 @@
 // Renames a professor on every syllabus that lists them, the same way an admin edit
 // in the Published tab does: the offering is rewritten, a scraped file is marked as
 // curated so the weekly scrape keeps the new name, and search gets the new name too.
-const { parseTerm } = require('./terms');
+const { parseTerm, deptOf, schoolOf } = require('./terms');
 const { parseInstructor } = require('./details');
 
-async function renameProfessor({ catalog, search }, from, to, { apply = false, by = 'rename-professor' } = {}) {
+// With `school`, only that school's syllabi change: the same name at two schools is two people.
+async function renameProfessor({ catalog, search }, from, to, { apply = false, by = 'rename-professor', school } = {}) {
   const oldName = String(from || '').trim();
   const newName = parseInstructor(to);
   if (!oldName) throw new Error('Give the current name to replace');
   if (oldName === newName) throw new Error('The new name is the same as the old one');
 
-  const offerings = await catalog.offeringsByInstructor(oldName);
+  const offerings = (await catalog.offeringsByInstructor(oldName)).filter((o) => !school || schoolOf(o.code) === school);
   const changes = offerings
     .map((old) => ({
       old,
@@ -21,7 +22,7 @@ async function renameProfessor({ catalog, search }, from, to, { apply = false, b
   if (apply) {
     for (const { old, instructors } of changes) {
       await catalog.updateOffering(old, {
-        dept: old.code.match(/^[A-Z]+/)[0],
+        dept: deptOf(old.code),
         code: old.code,
         title: old.title,
         term: parseTerm(old.termKey),
