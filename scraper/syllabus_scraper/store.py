@@ -127,7 +127,8 @@ class Store:
         """Lists a school on the site with how many departments and courses its catalog has."""
         self.db["schools"].update_one(
             {"_id": school["key"]},
-            {"$set": {"name": school["name"], "short": school["short"], "departments": departments,
+            {"$set": {"name": school["name"], "short": school["short"], "city": school.get("city", ""),
+                      "departments": departments,
                       "courses": courses, "updatedAt": datetime.now(timezone.utc).isoformat()}},
             upsert=True,
         )
