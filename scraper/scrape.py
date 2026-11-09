@@ -25,7 +25,7 @@ from urllib.parse import unquote, urlsplit
 
 from dotenv import load_dotenv
 
-from syllabus_scraper import cos, listings, math, sources
+from syllabus_scraper import cehd, cos, listings, math, sources
 from syllabus_scraper.catalog import fetch_catalog, fetch_departments
 from syllabus_scraper.schools import SCHOOLS
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
@@ -34,7 +34,9 @@ from syllabus_scraper.store import Store, detect_content_type
 from syllabus_scraper.listings import MAX_FILE_BYTES, mentions_course
 
 # Departments with a listing source (syllabus_scraper/listings.py), by --sources name.
-LISTING_SOURCES = {"math": math.rows, "science": cos.rows}
+LISTING_SOURCES = {"math": math.rows, "science": cos.rows, "cehd": cehd.rows}
+# Sources that keep what they read from pages that never change (the archive's) in the database.
+CACHED_SOURCES = {"cehd"}
 
 log = logging.getLogger("scraper")
 
@@ -185,11 +187,12 @@ def main(argv=None):
                 return
 
     def run_listings():
-        """Departments with a listing source: Math so far (syllabus_scraper/math.py)."""
+        """Departments with a listing source: Math (math.py), the College of Science (cos.py), CEHD (cehd.py)."""
         for name in wanted_sources:
             if name not in LISTING_SOURCES:
                 continue
-            items = list(LISTING_SOURCES[name](fetcher, listings.SINCE))
+            cache = {"cache": store} if name in CACHED_SOURCES else {}
+            items = list(LISTING_SOURCES[name](fetcher, listings.SINCE, **cache))
             chosen = listings.choose(items)
             log.info("%s: %d syllabi listed, %d to keep", name, len(items), len(chosen))
             if args.dry_run:
@@ -198,7 +201,8 @@ def main(argv=None):
                     log.info("%s  %-10s %-8s %-28s %s", row.term.label, ",".join(row.codes), row.section,
                              "; ".join(row.instructors), row.href)
                 continue
-            result = listings.save_all(store, fetcher, chosen, limit=args.limit)
+            # All of them, not just the chosen ones: older files stand in when the newest can't be used.
+            result = listings.save_all(store, fetcher, items, limit=args.limit)
             log.info("%s: %d new files, %d already saved, %d skipped%s", name, result["saved"], result["exists"],
                      result["skipped"], " (storage full)" if result.get("full") else "")
 

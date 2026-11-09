@@ -64,6 +64,13 @@ class Store:
         doc = self.pool.find({"metadata.sourceUrl": source_url}, {"metadata": 1})
         return (str(doc["_id"]), doc["metadata"]["contentType"]) if doc else None
 
+    def listing_page(self, url):
+        """Rows read earlier from an archived listing page that never changes (syllabus_scraper/cehd.py)."""
+        return self.db["listing_pages"].find_one({"_id": url})
+
+    def save_listing_page(self, url, doc):
+        self.db["listing_pages"].replace_one({"_id": url}, {"_id": url, **doc}, upsert=True)
+
     def course_title(self, code):
         item = self.table.get_item(Key={"PK": f"COURSE#{code}", "SK": "META"}).get("Item")
         if item:
