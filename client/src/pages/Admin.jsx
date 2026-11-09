@@ -729,6 +729,7 @@ const SOURCES = {
   'gmu-cs-filename': 'Scraped (from file name)',
   'gmu-math': 'Scraped (Math)',
   'gmu-math-filename': 'Scraped (Math, from file name)',
+  'gmu-cos': 'Scraped (College of Science)',
 };
 
 function OfferingRow({ code, offering, token }) {

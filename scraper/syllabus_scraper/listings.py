@@ -59,8 +59,8 @@ def mentions_course(data, content_type, codes):
     return any(re.search(rf"(?<!\d){re.escape(code[len(dept_of(code)):])}(?!\d)", text) for code in codes)
 
 
-def choose(items, keep_all=KEEP_ALL):
-    """The files worth downloading, in listing order."""
+def dedupe(items):
+    """Listed files without repeats, in listing order."""
     by_url, by_section = {}, set()
     for item in items:
         row = item.row
@@ -75,8 +75,12 @@ def choose(items, keep_all=KEEP_ALL):
             continue
         by_section.add(section)
         by_url[url] = item
+    return list(by_url.values())
 
-    chosen = list(by_url.values())
+
+def choose(items, keep_all=KEEP_ALL):
+    """The files worth downloading, in listing order."""
+    chosen = dedupe(items)
     newest = {}
     for item in chosen:
         if keeps_all(item.row.codes, keep_all):
@@ -102,43 +106,62 @@ def text_doc(row, codes, text):
     }
 
 
-def replace_older(store, code, term):
-    """Outside KEEP_ALL: False if the course already has a syllabus this new or newer.
-    Otherwise removes its older scraped ones (student uploads and admin fixes stay) and returns True."""
-    offerings = store.course_offerings(code)
-    if any(o["termKey"] >= term.key for o in offerings):
-        return False
-    for offering in offerings:
+def backups(items, keep_all=KEEP_ALL):
+    """Outside KEEP_ALL: course code -> its other listed files, newest first, to try when the
+    newest one can't be used (a Word file, or a dead link)."""
+    by_code = {}
+    for item in dedupe(items):
+        if not keeps_all(item.row.codes, keep_all):
+            by_code.setdefault(item.row.codes[0], []).append(item)
+    for listed_items in by_code.values():
+        listed_items.sort(key=lambda item: item.row.term.key, reverse=True)
+    return by_code
+
+
+def has_newer(store, code, term):
+    """True if the course already has a syllabus this new or newer."""
+    return any(o["termKey"] >= term.key for o in store.course_offerings(code))
+
+
+def remove_older(store, code, term):
+    """Removes the course's scraped syllabi older than `term` (student uploads and admin fixes stay)."""
+    for offering in store.course_offerings(code):
+        if offering["termKey"] >= term.key:
+            continue
         if offering.get("source") == "upload" or store.is_curated(offering.get("sourceUrl", "")):
             continue
         store.remove_offering(offering)
         log.info("Replaced %s %s with a newer syllabus", code, offering["termLabel"])
-    return True
 
 
 def save_one(store, fetcher, item, keep_all=KEEP_ALL):
-    """Returns "saved", "exists", "skipped" or "full"."""
+    """Returns "saved", "exists", "skipped" (a newer one is saved), "unusable" (missing or not a
+    PDF or web page) or "full"."""
     row = item.row
     url = source_url(row.href)
     if store.is_curated(url):
         return "exists"
     if store.file_for(url):
         return "exists"
-    if not keeps_all(row.codes, keep_all) and not replace_older(store, row.codes[0], row.term):
+    keep_one = not keeps_all(row.codes, keep_all)
+    if keep_one and has_newer(store, row.codes[0], row.term):
         return "skipped"
 
     data, _ = sources.fetch_file(fetcher, row.href, item.timestamp)
     content_type = store.content_type(data, url) if data else None
     if not content_type or len(data) > MAX_FILE_BYTES:
         log.warning("Skipped %s (%s)", url, "not found" if not data else "unsupported type or over 4 MB")
-        return "skipped"
+        return "unusable"
     if not mentions_course(data, content_type, row.codes):
         log.warning("Skipped %s (a web page that never mentions %s, likely a redirect)", url, ",".join(row.codes))
-        return "skipped"
+        return "unusable"
 
     file_id = store.save_file(data, url, content_type)
     if not file_id:
         return "full"
+    # Only now, so a dead or unusable newer link never costs the course the copy it has.
+    if keep_one:
+        remove_older(store, row.codes[0], row.term)
     if not row.title:
         row.title = store.course_title(row.codes[0]) or re.sub(r"^([A-Z]+)", r"\1 ", row.codes[0])
     for code in row.codes:
@@ -157,8 +180,18 @@ def save_one(store, fetcher, item, keep_all=KEEP_ALL):
 def save_all(store, fetcher, items, limit=0, keep_all=KEEP_ALL):
     """Downloads every chosen file not saved yet. Returns counts by result."""
     counts = {"saved": 0, "exists": 0, "skipped": 0}
+    others = backups(items, keep_all)
     for item in choose(items, keep_all):
         result = save_one(store, fetcher, item, keep_all)
+        # Newest per course: when its file can't be used, the next newest one stands in.
+        for backup in others.get(item.row.codes[0], []) if result == "unusable" else []:
+            if backup is item or backup.row.term.key > item.row.term.key:
+                continue
+            result = save_one(store, fetcher, backup, keep_all)
+            if result != "unusable":
+                break
+        if result == "unusable":
+            result = "skipped"
         if result == "full":
             log.warning("Storage is full; add a cluster (MONGODB_URI_2, ...) to keep more files. Stopping here.")
             counts["full"] = True

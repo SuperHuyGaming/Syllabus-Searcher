@@ -111,7 +111,7 @@ def test_save_one_skips_curated_and_non_files(monkeypatch):
     fake_fetch(monkeypatch, data=b"PK\x03\x04 a docx")
     store = FakeStore()
     assert listings.save_one(store, None, listed("MATH113", SPRING, href="https://x.edu/curated.pdf")) == "exists"
-    assert listings.save_one(store, None, listed("MATH113", SPRING)) == "skipped"
+    assert listings.save_one(store, None, listed("MATH113", SPRING)) == "unusable"
     assert store.saved == []
 
 
@@ -137,3 +137,35 @@ def test_save_all_stops_at_the_limit_and_when_storage_is_full(monkeypatch):
 
     counts = listings.save_all(FakeStore(full=True), None, items)
     assert counts["saved"] == 0 and counts["full"] is True
+
+
+def test_unusable_newer_file_keeps_the_older_copy(monkeypatch):
+    fake_fetch(monkeypatch, data=b"PK a docx")
+    older = {"PK": "COURSE#GGS300", "SK": "TERM#2020-1#SEC#001#a", "termKey": SPRING.key, "termLabel": "Spring 2020",
+             "source": "gmu-cos", "sourceUrl": "https://x.edu/old.pdf", "code": "GGS300", "fileId": "a"}
+    store = FakeStore({"GGS300": [older]})
+    assert listings.save_one(store, None, listed("GGS300", FALL)) == "unusable"
+    assert store.removed == []
+
+
+def test_save_all_falls_back_to_the_next_newest_file(monkeypatch):
+    calls = []
+
+    def fetch(fetcher, href, timestamp=None):
+        calls.append(href)
+        return (b"PK a docx" if href.endswith(".docx") else PDF), None
+
+    monkeypatch.setattr(listings.sources, "fetch_file", fetch)
+    newest = listed("GGS300", FALL, href="https://x.edu/ggs300-fall.docx")
+    middle = listed("GGS300", Term("Spring", 2021), href="https://x.edu/ggs300-spring.pdf")
+    oldest = listed("GGS300", SPRING, href="https://x.edu/ggs300-old.pdf")
+    store = FakeStore()
+    counts = listings.save_all(store, None, [oldest, newest, middle])
+    assert counts == {"saved": 1, "exists": 0, "skipped": 0}
+    assert calls == ["https://x.edu/ggs300-fall.docx", "https://x.edu/ggs300-spring.pdf"]
+    assert [code for _, code, *_ in store.saved] == ["GGS300"]
+
+    # Every file unusable: counted once as skipped.
+    calls.clear()
+    bad = [listed("GGS301", FALL, href="https://x.edu/a.docx"), listed("GGS301", SPRING, href="https://x.edu/b.docx")]
+    assert listings.save_all(FakeStore(), None, bad) == {"saved": 0, "exists": 0, "skipped": 1}
