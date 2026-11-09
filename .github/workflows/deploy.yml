@@ -107,6 +107,8 @@ jobs:
         working-directory: infra
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_URI_2: ${{ secrets.MONGODB_URI_2 }}
+          MONGODB_URI_3: ${{ secrets.MONGODB_URI_3 }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
@@ -124,6 +126,8 @@ jobs:
           add() { if [ -n "$2" ]; then params+=("$1=$2"); fi; }
           add MongoDbUri "$MONGODB_URI"
           add MongoDbName "$MONGODB_DB"
+          add MongoDbUri2 "$MONGODB_URI_2"
+          add MongoDbUri3 "$MONGODB_URI_3"
           add SupabaseUrl "$SUPABASE_URL"
           add SupabaseServiceRoleKey "$SUPABASE_SERVICE_ROLE_KEY"
           add AdminEmails "$ADMIN_EMAILS"

@@ -45,6 +45,8 @@ The Free Plan for new accounts lasts 6 months. After that, AWS asks you to switc
 
 One cluster serves both environments: each uses its own database (`syllabus_searcher_staging` and `syllabus_searcher`), which the workflows pick automatically. Use the same `MONGODB_URI` for both.
 
+**More room for syllabus files.** A free M0 cluster holds 512 MB, shared by both sites. The scraper fills it to 470 MB (`STORAGE_CAP_MB`) and then stops downloading, with "Storage is full" in the Scrape syllabi log; staging stops sooner, at a 120 MB sample (`STORAGE_BUDGET_MB`, an optional environment variable), so production gets the space. Atlas allows one free M0 per project, so for more room: Atlas → New Project → create another M0 cluster as above (same user setup and `0.0.0.0/0` access), copy its connection string, and add it as the secret `MONGODB_URI_2` (then `MONGODB_URI_3`) in both environments. Redeploy so the API reads from it too (Actions → Deploy, or the next push). New files go to the first cluster with room; the scrape log lists each cluster's use at the start.
+
 ## 3. Supabase (upload queue and admin login)
 
 Make **one project per environment** (the free plan allows two), e.g. `syllabus-searcher-staging` and `syllabus-searcher`, so staging uploads and sign-ins stay out of production. For each:
@@ -70,6 +72,7 @@ Then in each environment → **Add environment secret** for each row. Values mar
 | `AWS_ACCESS_KEY_ID` | from step 1 (*same*) |
 | `AWS_SECRET_ACCESS_KEY` | from step 1 (*same*) |
 | `MONGODB_URI` | from step 2 (*same*) |
+| `MONGODB_URI_2`, `MONGODB_URI_3` | Optional extra free clusters for syllabus files, see step 2 (*same*) |
 | `SUPABASE_URL` | this environment's Supabase project |
 | `SUPABASE_ANON_KEY` | this environment's Supabase project |
 | `SUPABASE_SERVICE_ROLE_KEY` | this environment's Supabase project |

@@ -15,6 +15,16 @@ Parameters:
   MongoDbName:
     Type: String
     Default: syllabus_searcher
+  MongoDbUri2:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional second free Atlas cluster for more syllabus files (scraper/syllabus_scraper/pool.py)
+  MongoDbUri3:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional third free Atlas cluster for more syllabus files
   SupabaseUrl:
     Type: String
     Default: ''
@@ -131,6 +141,8 @@ Resources:
           TABLE_NAME: !Ref CatalogTable
           MONGODB_URI: !Ref MongoDbUri
           MONGODB_DB: !Ref MongoDbName
+          MONGODB_URI_2: !Ref MongoDbUri2
+          MONGODB_URI_3: !Ref MongoDbUri3
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceRoleKey
           ADMIN_EMAILS: !Ref AdminEmails

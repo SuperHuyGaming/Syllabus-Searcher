@@ -11,6 +11,13 @@ module.exports = {
 
   mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
   mongoDb: process.env.MONGODB_DB || 'syllabus_searcher',
+  // Extra free Atlas clusters holding more syllabus files: MONGODB_URI_2, MONGODB_URI_3, ...
+  // (repos/files.js reads from each in turn; the scraper fills them, scraper/syllabus_scraper/pool.py).
+  mongoPoolUris: Object.keys(process.env)
+    .map((name) => /^MONGODB_URI_(d+)$/.exec(name))
+    .filter((m) => m && process.env[m[0]].trim())
+    .sort((a, b) => Number(a[1]) - Number(b[1]))
+    .map((m) => process.env[m[0]].trim()),
 
   supabaseUrl: process.env.SUPABASE_URL || '',
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',

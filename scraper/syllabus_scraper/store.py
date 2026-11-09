@@ -1,5 +1,5 @@
 """Writes scraped syllabi to the same stores the API reads:
-files -> MongoDB GridFS bucket "syllabi", courses with syllabi and their offerings -> DynamoDB
+files -> MongoDB GridFS bucket "syllabi" on the storage pool's clusters (syllabus_scraper/pool.py), courses with syllabi and their offerings -> DynamoDB
 (layout in api/src/repos/catalog.js), searchable text -> MongoDB collection "syllabus_text"
 (read by api/src/repos/search.js), course catalogs -> MongoDB collections "schools", "departments"
 and "courses" (read by api/src/repos/departments.js).
@@ -12,13 +12,12 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 import boto3
-import gridfs
 from boto3.dynamodb.conditions import Attr, Key
-from bson import ObjectId
-from pymongo import MongoClient, UpdateOne
+from pymongo import UpdateOne
 
 from .names import full_name, needs_full_name
 from .pdf import PdfMaker
+from .pool import Pool
 from .schools import DEFAULT_SCHOOL, school_code
 from .text import extract_text
 
@@ -36,9 +35,9 @@ def detect_content_type(data, url):
 
 class Store:
     def __init__(self):
-        mongo = MongoClient(os.environ.get("MONGODB_URI", "mongodb://localhost:27017"))
-        self.db = mongo[os.environ.get("MONGODB_DB", "syllabus_searcher")]
-        self.bucket = gridfs.GridFSBucket(self.db, bucket_name="syllabi")
+        self.pool = Pool.from_env()
+        # Search text and catalogs stay on the main cluster.
+        self.db = self.pool.main.db
         dynamo = boto3.resource(
             "dynamodb",
             region_name=os.environ.get("AWS_REGION", "us-east-1"),
@@ -62,7 +61,7 @@ class Store:
 
     def file_for(self, source_url):
         """Returns (file_id, content_type) if this file was already saved, else None."""
-        doc = self.db["syllabi.files"].find_one({"metadata.sourceUrl": source_url}, {"metadata": 1})
+        doc = self.pool.find({"metadata.sourceUrl": source_url}, {"metadata": 1})
         return (str(doc["_id"]), doc["metadata"]["contentType"]) if doc else None
 
     def course_title(self, code):
@@ -73,11 +72,54 @@ class Store:
         return course["title"] if course else None
 
     def save_file(self, data, source_url, content_type):
+        """Returns the new file's id, or None when every storage cluster is full."""
         filename = source_url.rsplit("/", 1)[-1]
-        file_id = self.bucket.upload_from_stream(
-            filename, data, metadata={"contentType": content_type, "sourceUrl": source_url}
+        return self.pool.save(data, filename, {"contentType": content_type, "sourceUrl": source_url})
+
+    def content_type(self, data, url):
+        return detect_content_type(data, url)
+
+    def course_offerings(self, code):
+        """A course's offerings (every syllabus listed for it)."""
+        items, kwargs = [], {"KeyConditionExpression": Key("PK").eq(f"COURSE#{code}") & Key("SK").begins_with("TERM#")}
+        while True:
+            page = self.table.query(**kwargs)
+            items.extend(page["Items"])
+            if "LastEvaluatedKey" not in page:
+                return items
+            kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+    def remove_offering(self, offering):
+        """Deletes one offering; its file, text and summary go too unless another course still lists it."""
+        self.table.delete_item(Key={"PK": offering["PK"], "SK": offering["SK"]})
+        file_id = offering["fileId"]
+        text = self.db["syllabus_text"].find_one({"_id": file_id}, {"codes": 1}) or {}
+        others = [c for c in text.get("codes", []) if c != offering["code"]]
+        if others:
+            self.db["syllabus_text"].update_one({"_id": file_id}, {"$set": {"codes": others}})
+            return
+        self.pool.delete(file_id)
+        if offering.get("pdfFileId"):
+            self.pool.delete(offering["pdfFileId"])
+        self.db["syllabus_text"].delete_one({"_id": file_id})
+        self.table.delete_item(Key={"PK": "SUMMARY", "SK": file_id})
+
+    def save_text(self, file_id, doc):
+        self.db["syllabus_text"].replace_one({"_id": file_id}, doc, upsert=True)
+
+    def save_summary(self, file_id, summary, provider):
+        """Same record the API's summaries use (PK=SUMMARY, api/src/lib/summary.js), so the
+        Summarize syllabi workflow skips this file."""
+        self.table.put_item(
+            Item={
+                "PK": "SUMMARY",
+                "SK": file_id,
+                "summary": summary,
+                "provider": provider,
+                "model": provider,
+                "generatedAt": datetime.now(timezone.utc).isoformat(),
+            }
         )
-        return str(file_id)
 
     def _touch_course(self, dept, code, title, now):
         """Course list entry + course record. Updates rather than replaces, so catalog details
@@ -209,9 +251,8 @@ class Store:
         for file_id, offerings in self.offerings_by_file().items():
             if file_id in done:
                 continue
-            try:
-                stream = self.bucket.open_download_stream(ObjectId(file_id))
-            except gridfs.errors.NoFile:
+            stream = self.pool.open(file_id)
+            if stream is None:
                 continue
             text = extract_text(stream.read(), stream.metadata.get("contentType", ""))
             first = offerings[0]
@@ -270,8 +311,11 @@ class Store:
         """Gives every HTML syllabus a PDF copy (pdfFileId on its offerings), so students can
         always download a PDF. Copies are made once; later runs only re-link them, since a
         re-scrape rewrites offerings without pdfFileId. Returns how many copies were made."""
-        files = self.db["syllabi.files"]
-        html_files = list(files.find({"metadata.contentType": {"$regex": "^text/html"}}, {"filename": 1}))
+        html_files = [
+            doc
+            for member in self.pool.members
+            for doc in member.db["syllabi.files"].find({"metadata.contentType": {"$regex": "^text/html"}}, {"filename": 1})
+        ]
         if not html_files:
             return 0
         by_file = self.offerings_by_file()
@@ -279,19 +323,18 @@ class Store:
         with PdfMaker() as maker:
             for html_file in html_files:
                 html_id = str(html_file["_id"])
-                copy = files.find_one({"metadata.pdfOf": html_id}, {"_id": 1})
+                copy = self.pool.find({"metadata.pdfOf": html_id}, {"_id": 1})
                 if copy:
                     pdf_id = str(copy["_id"])
                 else:
-                    pdf = maker.html_to_pdf(self.bucket.open_download_stream(html_file["_id"]).read())
+                    pdf = maker.html_to_pdf(self.pool.open(html_id).read())
                     if not pdf:
                         continue
                     name = html_file["filename"].rsplit(".", 1)[0] + ".pdf"
-                    pdf_id = str(
-                        self.bucket.upload_from_stream(
-                            name, pdf, metadata={"contentType": "application/pdf", "pdfOf": html_id}
-                        )
-                    )
+                    pdf_id = self.pool.save(pdf, name, {"contentType": "application/pdf", "pdfOf": html_id})
+                    if not pdf_id:
+                        log.warning("Storage is full; no PDF copy of %s", html_id)
+                        continue
                     made += 1
                 for offering in by_file.get(html_id, []):
                     if offering.get("pdfFileId") != pdf_id:
