@@ -7,10 +7,13 @@
     python scrape.py --catalog-only                 # just load every course from catalog.gmu.edu
     python scrape.py --catalog-only --departments CS,MATH   # just these departments
     python scrape.py --catalog-only --schools unc --dry-run # count one school's courses, write nothing
+    python scrape.py --sources math --no-catalog --limit 50 # only Math syllabi, at most 50 new files
 
-Two passes:
+CS syllabi (--sources cs), two passes:
   1. Listing pages (live or archived): course, section, title and instructor come from the table.
   2. Archived files no listing page mentions (e.g. all of 2023): details are guessed from the file name.
+Other departments (--sources math) go through the shared path in syllabus_scraper/listings.py:
+exact file URLs from their listings, a copy of each file, rule-based summaries.
 """
 
 import argparse
@@ -22,14 +25,16 @@ from urllib.parse import unquote, urlsplit
 
 from dotenv import load_dotenv
 
-from syllabus_scraper import sources
+from syllabus_scraper import listings, math, sources
 from syllabus_scraper.catalog import fetch_catalog, fetch_departments
 from syllabus_scraper.schools import SCHOOLS
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
 from syllabus_scraper.store import Store, detect_content_type
-from syllabus_scraper.text import extract_text
 
-MAX_FILE_BYTES = 4 * 1024 * 1024  # same cap as the API (Lambda response limit)
+from syllabus_scraper.listings import MAX_FILE_BYTES, mentions_course
+
+# Departments with a listing source (syllabus_scraper/listings.py), by --sources name.
+LISTING_SOURCES = {"math": math.rows}
 
 log = logging.getLogger("scraper")
 
@@ -87,16 +92,6 @@ def filename_rows(fetcher, since, seen, titles, store):
         log.info("Archive files for %s: %d not on any listing page", term.label, found)
 
 
-def mentions_course(data, content_type, codes):
-    """False for a web page that never names its course number. Dead syllabus links can
-    redirect to a generic department page, and the archive saves that page instead.
-    PDFs are trusted: scanned ones have no text to check."""
-    if not content_type.startswith("text/html"):
-        return True
-    text = extract_text(data, content_type)
-    return any(re.search(rf"(?<!\d){re.escape(code[len(dept_of(code)):])}(?!\d)", text) for code in codes)
-
-
 def save_row(store, fetcher, timestamp, row, codes):
     """Downloads the file if it's new and writes the offering. Returns True if a new file was saved,
     False if it already existed, None if it was skipped."""
@@ -117,6 +112,9 @@ def save_row(store, fetcher, timestamp, row, codes):
             log.warning("Skipped %s (a web page that never mentions %s, likely a redirect)", source_url, ",".join(codes))
             return None
         file_id = store.save_file(data, source_url, content_type)
+        if not file_id:
+            log.warning("Skipped %s (storage is full; add a cluster: MONGODB_URI_2, ...)", source_url)
+            return None
 
     for code in codes:
         store.save_offering(dept_of(code), code, row, file_id, content_type, source_url)
@@ -128,7 +126,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--since", default="Fall 2022", help='Oldest term to keep, e.g. "Fall 2022"')
     parser.add_argument("--dry-run", action="store_true", help="Parse and list rows without downloading or writing")
-    parser.add_argument("--limit", type=int, default=0, help="Stop after this many new files")
+    parser.add_argument("--limit", type=int, default=0, help="Stop after this many new files (per source)")
+    parser.add_argument("--sources", default="cs," + ",".join(LISTING_SOURCES),
+                        help='Syllabus sources to scrape, e.g. "math" (default: cs and every listing source)')
     parser.add_argument("--html", nargs="*", help="Parse saved listing pages instead of fetching the index")
     parser.add_argument("--no-filenames", action="store_true", help="Skip the pass that guesses details from file names")
     parser.add_argument("--delay", type=float, default=1.0, help="Seconds between requests")
@@ -184,6 +184,24 @@ def main(argv=None):
             if not handle(timestamp, row):
                 return
 
+    def run_listings():
+        """Departments with a listing source: Math so far (syllabus_scraper/math.py)."""
+        for name in wanted_sources:
+            if name not in LISTING_SOURCES:
+                continue
+            items = list(LISTING_SOURCES[name](fetcher, listings.SINCE))
+            chosen = listings.choose(items)
+            log.info("%s: %d syllabi listed, %d to keep", name, len(items), len(chosen))
+            if args.dry_run:
+                for item in chosen:
+                    row = item.row
+                    log.info("%s  %-10s %-8s %-28s %s", row.term.label, ",".join(row.codes), row.section,
+                             "; ".join(row.instructors), row.href)
+                continue
+            result = listings.save_all(store, fetcher, chosen, limit=args.limit)
+            log.info("%s: %d new files, %d already saved, %d skipped%s", name, result["saved"], result["exists"],
+                     result["skipped"], " (storage full)" if result.get("full") else "")
+
     def load_catalog():
         """Every department and course of each school's catalog. With --dry-run, only counts them."""
         wanted_schools = {k.strip().lower() for k in args.schools.split(",") if k.strip()}
@@ -217,9 +235,18 @@ def main(argv=None):
             store.count_syllabi()
         return 0
 
+    wanted_sources = [s.strip().lower() for s in args.sources.split(",") if s.strip()]
+    unknown = set(wanted_sources) - {"cs", *LISTING_SOURCES}
+    if unknown:
+        parser.error(f"unknown --sources {', '.join(sorted(unknown))}; choose from cs, {', '.join(LISTING_SOURCES)}")
+    if store:
+        for line in store.pool.report():
+            log.info(line)
     if not args.index_only:
-        run()
-        log.info("Done: %d rows, %d new files, %d skipped", counts["rows"], counts["saved"], counts["skipped"])
+        if "cs" in wanted_sources:
+            run()
+            log.info("Done: %d rows, %d new files, %d skipped", counts["rows"], counts["saved"], counts["skipped"])
+        run_listings()
     if store and not args.no_catalog:
         load_catalog()
     if store:

@@ -22,9 +22,15 @@ export function hasSummary(summary) {
 
 // "AI summary by Gemini, Nov 2, 2026" or "Edited by an admin, Nov 3, 2026".
 // A course rollup says how many syllabi it was made from: "AI summary of 4 syllabi by Gemini, ...".
+// Syllabi from the bigger sources (Math on) get a summary picked out of the text by rules, not AI
+// (provider "rules", scraper/syllabus_scraper/rules.py).
 export function summaryCredit(record) {
   const date = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { dateStyle: 'medium' }) : '');
-  if (record?.editedAt) return `AI summary, checked by an admin ${date(record.editedAt)}`.trim();
+  if (record?.editedAt) {
+    const kind = record.provider === 'rules' ? 'Summary' : 'AI summary';
+    return `${kind}, checked by an admin ${date(record.editedAt)}`.trim();
+  }
+  if (record?.provider === 'rules') return `Picked out of the syllabus text automatically (no AI)${record.generatedAt ? `, ${date(record.generatedAt)}` : ''}`;
   const of = record?.fileIds?.length ? ` of ${record.fileIds.length} syllabi` : '';
   const by = record?.provider ? ` by ${record.provider}` : '';
   return `AI summary${of}${by}${record?.generatedAt ? `, ${date(record.generatedAt)}` : ''}`;

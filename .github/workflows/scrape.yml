@@ -1,5 +1,8 @@
-# Re-scrapes GMU CS syllabi and the whole GMU course catalog into the cloud stores (DynamoDB + MongoDB Atlas) every week,
-# for both environments. Each environment skips quietly until its secrets exist.
+# Re-scrapes GMU syllabi (CS, and Math through scraper/syllabus_scraper/listings.py) and every school's course
+# catalog into the cloud stores (DynamoDB + MongoDB Atlas) every week, for both environments. Each environment
+# skips quietly until its secrets exist. Syllabus files go to the storage pool: MONGODB_URI, then the optional
+# MONGODB_URI_2 and MONGODB_URI_3 clusters. Staging keeps only a sample (STORAGE_BUDGET_MB, default 120 MB),
+# so production gets the space.
 name: Scrape syllabi
 # Manual runs (and "Refresh now" on /admin) name the site, so the admin page can find its own run.
 run-name: ${{ github.event_name == 'workflow_dispatch' && format('Scrape syllabi ({0})', inputs.environment) || 'Scrape syllabi' }}
@@ -15,8 +18,18 @@ on:
         options: [production, staging]
         default: production
       since:
-        description: Oldest term to scrape
+        description: Oldest CS term to scrape
         default: Fall 2022
+      sources:
+        description: Syllabus sources (cs, math)
+        default: cs,math
+      limit:
+        description: Most new files per source this run (0 = no limit)
+        default: '400'
+      catalog:
+        description: Also reload every school's course catalog
+        type: boolean
+        default: true
 
 jobs:
   scrape:
@@ -47,6 +60,9 @@ jobs:
         working-directory: scraper
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_URI_2: ${{ secrets.MONGODB_URI_2 }}
+          MONGODB_URI_3: ${{ secrets.MONGODB_URI_3 }}
+          STORAGE_BUDGET_MB: ${{ vars.STORAGE_BUDGET_MB || (matrix.environment == 'staging' && '120' || '') }}
           # Same names the deploy workflow gives each environment's stack and database.
           MONGODB_DB: ${{ matrix.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
           TABLE_NAME: ${{ matrix.environment == 'production' && 'syllabus-searcher-catalog' || 'syllabus-searcher-staging-catalog' }}
@@ -56,4 +72,4 @@ jobs:
         run: |
           pip install -r requirements.txt
           playwright install --with-deps chromium
-          python scrape.py --since "${{ inputs.since || 'Fall 2022' }}"
+          python scrape.py --since "${{ inputs.since || 'Fall 2022' }}" --sources "${{ inputs.sources || 'cs,math' }}" --limit "${{ inputs.limit || '400' }}" ${{ inputs.catalog == false && '--no-catalog' || '' }}
