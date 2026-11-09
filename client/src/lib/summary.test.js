@@ -47,6 +47,13 @@ describe('summaryCredit', () => {
       'AI summary, checked by an admin Nov 3, 2026'
     );
   });
+
+  test('says when rules, not AI, picked it out', () => {
+    expect(summaryCredit({ provider: 'rules', generatedAt: '2026-11-09T12:00:00Z' })).toBe(
+      'Picked out of the syllabus text automatically (no AI), Nov 9, 2026'
+    );
+    expect(summaryCredit({ provider: 'rules', editedAt: '2026-11-10T12:00:00Z' })).toBe('Summary, checked by an admin Nov 10, 2026');
+  });
 });
 
 describe('course rollups', () => {

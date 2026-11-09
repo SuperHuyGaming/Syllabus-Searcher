@@ -1,4 +1,4 @@
-// Writes AI summaries for published syllabi that don't have one yet (see src/lib/summary.js).
+// Writes AI summaries for published CS syllabi and uploads that don't have one yet (see src/lib/summary.js).
 // Uploads get theirs when approved; this backfills scraped syllabi and retries any that
 // failed. Free tiers allow a limited number of requests a day, so it stops after --limit
 // files and waits --delay seconds between them; the next run picks up the rest.
@@ -14,6 +14,11 @@ const { createCatalog } = require('../src/repos/catalog');
 const { createFiles } = require('../src/repos/files');
 const { summarizeFile } = require('../src/lib/summary');
 const { rollupSources, rollupAction, rollupCourse } = require('../src/lib/rollup');
+
+// Only these get an AI summary here. Syllabi from newer sources (Math and on) come by the
+// thousand, more than the free tiers can do, so the scraper gives them a rule-based summary
+// (scraper/syllabus_scraper/rules.py); an admin can still press "Regenerate" for an AI one.
+const AI_SOURCES = new Set(['gmu-cs', 'gmu-cs-filename', 'upload']);
 
 const wait = (seconds) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 
@@ -37,7 +42,9 @@ async function main() {
   const offerings = await catalog.listOfferings();
   const done = redo ? new Set() : await catalog.summarizedFileIds();
   const byFile = new Map();
-  for (const o of offerings) if (!done.has(o.fileId) && !byFile.has(o.fileId)) byFile.set(o.fileId, o);
+  for (const o of offerings) {
+    if (AI_SOURCES.has(o.source) && !done.has(o.fileId) && !byFile.has(o.fileId)) byFile.set(o.fileId, o);
+  }
 
   const todo = [...byFile.values()].slice(0, limit);
   console.log(`${byFile.size} syllabus file(s) need a summary; doing ${todo.length}.`);

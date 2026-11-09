@@ -723,7 +723,13 @@ function Professors({ token }) {
   );
 }
 
-const SOURCES = { upload: 'Student upload', 'gmu-cs': 'Scraped', 'gmu-cs-filename': 'Scraped (from file name)' };
+const SOURCES = {
+  upload: 'Student upload',
+  'gmu-cs': 'Scraped',
+  'gmu-cs-filename': 'Scraped (from file name)',
+  'gmu-math': 'Scraped (Math)',
+  'gmu-math-filename': 'Scraped (Math, from file name)',
+};
 
 function OfferingRow({ code, offering, token }) {
   const queryClient = useQueryClient();

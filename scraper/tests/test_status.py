@@ -15,6 +15,7 @@ class FakeStore:
 
     def __init__(self):
         self.scraped = 0
+        self.pool = type("FakePool", (), {"report": lambda self: []})()
 
     def index_text(self, reindex=False):
         return 0
@@ -50,7 +51,7 @@ def test_a_full_scrape_is_recorded_but_index_only_is_not(monkeypatch):
 
     assert scrape.main(["--index-only", "--no-catalog"]) == 0
     assert fake.scraped == 0
-    assert scrape.main(["--no-catalog", "--no-filenames"]) == 0
+    assert scrape.main(["--no-catalog", "--no-filenames", "--sources", "cs"]) == 0
     assert fake.scraped == 1
 
 
