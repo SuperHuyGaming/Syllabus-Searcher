@@ -25,7 +25,7 @@ from urllib.parse import unquote, urlsplit
 
 from dotenv import load_dotenv
 
-from syllabus_scraper import listings, math, sources
+from syllabus_scraper import cos, listings, math, sources
 from syllabus_scraper.catalog import fetch_catalog, fetch_departments
 from syllabus_scraper.schools import SCHOOLS
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
@@ -34,7 +34,7 @@ from syllabus_scraper.store import Store, detect_content_type
 from syllabus_scraper.listings import MAX_FILE_BYTES, mentions_course
 
 # Departments with a listing source (syllabus_scraper/listings.py), by --sources name.
-LISTING_SOURCES = {"math": math.rows}
+LISTING_SOURCES = {"math": math.rows, "science": cos.rows}
 
 log = logging.getLogger("scraper")
 
