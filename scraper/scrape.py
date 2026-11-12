@@ -128,6 +128,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--since", default="Fall 2022", help='Oldest term to keep, e.g. "Fall 2022"')
     parser.add_argument("--dry-run", action="store_true", help="Parse and list rows without downloading or writing")
+    parser.add_argument("--move-files", type=float, default=None, metavar="MB",
+                        help="First move up to MB of files from the Atlas clusters to Supabase Storage (0 = all)")
     parser.add_argument("--limit", type=int, default=0, help="Stop after this many new files (per source)")
     parser.add_argument("--sources", default="cs," + ",".join(LISTING_SOURCES),
                         help='Syllabus sources to scrape, e.g. "math" (default: cs and every listing source)')
@@ -243,6 +245,9 @@ def main(argv=None):
     unknown = set(wanted_sources) - {"cs", *LISTING_SOURCES}
     if unknown:
         parser.error(f"unknown --sources {', '.join(sorted(unknown))}; choose from cs, {', '.join(LISTING_SOURCES)}")
+    if store and args.move_files is not None:
+        moved, size = store.pool.move_to_supabase(args.move_files or None)
+        log.info("Moved %d files (%.1f MB) from Atlas to Supabase Storage", moved, size / (1024 * 1024))
     if store:
         for line in store.pool.report():
             log.info(line)
