@@ -61,6 +61,8 @@ jobs:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_URI_2: ${{ secrets.MONGODB_URI_2 }}
           MONGODB_URI_3: ${{ secrets.MONGODB_URI_3 }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           MONGODB_DB: ${{ matrix.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
           TABLE_NAME: ${{ matrix.environment == 'production' && 'syllabus-searcher-catalog' || 'syllabus-searcher-staging-catalog' }}
           AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
