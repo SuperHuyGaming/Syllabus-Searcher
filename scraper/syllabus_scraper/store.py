@@ -1,5 +1,5 @@
 """Writes scraped syllabi to the same stores the API reads:
-files -> MongoDB GridFS bucket "syllabi" on the storage pool's clusters (syllabus_scraper/pool.py), courses with syllabi and their offerings -> DynamoDB
+files -> the storage pool (syllabus_scraper/pool.py: Supabase Storage, then GridFS bucket "syllabi" on Atlas clusters), courses with syllabi and their offerings -> DynamoDB
 (layout in api/src/repos/catalog.js), searchable text -> MongoDB collection "syllabus_text"
 (read by api/src/repos/search.js), course catalogs -> MongoDB collections "schools", "departments"
 and "courses" (read by api/src/repos/departments.js).
@@ -318,11 +318,7 @@ class Store:
         """Gives every HTML syllabus a PDF copy (pdfFileId on its offerings), so students can
         always download a PDF. Copies are made once; later runs only re-link them, since a
         re-scrape rewrites offerings without pdfFileId. Returns how many copies were made."""
-        html_files = [
-            doc
-            for member in self.pool.members
-            for doc in member.db["syllabi.files"].find({"metadata.contentType": {"$regex": "^text/html"}}, {"filename": 1})
-        ]
+        html_files = self.pool.find_all({"metadata.contentType": {"$regex": "^text/html"}}, {"filename": 1})
         if not html_files:
             return 0
         by_file = self.offerings_by_file()

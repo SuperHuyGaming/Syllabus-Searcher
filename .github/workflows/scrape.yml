@@ -26,6 +26,9 @@ on:
       limit:
         description: Most new files per source this run (0 = no limit)
         default: '400'
+      move_files:
+        description: First move this many MB of files from Atlas to Supabase Storage (0 = all, blank = none)
+        default: ''
       catalog:
         description: Also reload every school's course catalog
         type: boolean
@@ -62,6 +65,9 @@ jobs:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_URI_2: ${{ secrets.MONGODB_URI_2 }}
           MONGODB_URI_3: ${{ secrets.MONGODB_URI_3 }}
+          # New files go to the site's Supabase Storage first (syllabus_scraper/pool.py).
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           STORAGE_BUDGET_MB: ${{ vars.STORAGE_BUDGET_MB || (matrix.environment == 'staging' && '120' || '') }}
           # Same names the deploy workflow gives each environment's stack and database.
           MONGODB_DB: ${{ matrix.environment == 'production' && 'syllabus_searcher' || 'syllabus_searcher_staging' }}
@@ -72,4 +78,4 @@ jobs:
         run: |
           pip install -r requirements.txt
           playwright install --with-deps chromium
-          python scrape.py --since "${{ inputs.since || 'Fall 2022' }}" --sources "${{ inputs.sources || (matrix.environment == 'staging' && 'cs,math,science' || 'cs,math,science,cehd') }}" --limit "${{ inputs.limit || '400' }}" ${{ inputs.catalog == false && '--no-catalog' || '' }}
+          python scrape.py --since "${{ inputs.since || 'Fall 2022' }}" --sources "${{ inputs.sources || (matrix.environment == 'staging' && 'cs,math,science' || 'cs,math,science,cehd') }}" --limit "${{ inputs.limit || '400' }}" ${{ inputs.catalog == false && '--no-catalog' || '' }} ${{ inputs.move_files != '' && format('--move-files {0}', inputs.move_files) || '' }}

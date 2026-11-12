@@ -57,3 +57,47 @@ describe('files across storage clusters', () => {
     expect(await solo.read('syllabi', inSecond)).toBeNull();
   });
 });
+
+describe('files in Supabase Storage', () => {
+  const inSupabase = new ObjectId().toHexString();
+  const inMain = new ObjectId().toHexString();
+
+  function fakeStored() {
+    const records = { [inSupabase]: { filename: 'c.pdf', metadata: { contentType: 'application/pdf', sourceUrl: 'x' } } };
+    const objects = { [inSupabase]: Buffer.from('supabase') };
+    return {
+      records,
+      objects,
+      find: async (objectId) => records[objectId.toHexString()] || null,
+      download: async (id) => objects[id] || null,
+      async remove(objectId) {
+        delete objects[objectId.toHexString()];
+        delete records[objectId.toHexString()];
+      },
+    };
+  }
+
+  test('reads and removes a scraped file kept in Supabase Storage', async () => {
+    const stored = fakeStored();
+    const main = { [inMain]: { filename: 'a.pdf', metadata: {}, data: Buffer.from('main') } };
+    const files = createFiles({ db: main, pool: [], makeBucket, stored });
+    const file = await files.read('syllabi', inSupabase);
+    expect(file.buffer.toString()).toBe('supabase');
+    expect(file.contentType).toBe('application/pdf');
+    expect((await files.read('syllabi', inMain)).buffer.toString()).toBe('main');
+    // Uploads waiting for review are never in Supabase Storage.
+    expect(await files.read('pending', inSupabase)).toBeNull();
+
+    await files.remove('syllabi', inSupabase);
+    expect(stored.records[inSupabase]).toBeUndefined();
+    expect(stored.objects[inSupabase]).toBeUndefined();
+  });
+
+  test('a failed lookup reads as a missing file', async () => {
+    const stored = { ...fakeStored(), find: async () => { throw new Error('down'); } };
+    const files = createFiles({ db: {}, pool: [], makeBucket, stored });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await files.read('syllabi', inSupabase)).toBeNull();
+    console.error.mockRestore();
+  });
+});
