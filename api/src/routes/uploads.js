@@ -33,7 +33,7 @@ module.exports = ({ catalog, departments, files, uploads, analyze = analyzeSylla
       const kind = fileKind(file);
       if (!kind) throw new HttpError(415, 'Only PDF or HTML files are accepted');
 
-      const ipHash = crypto.createHash('sha256').update(config.ipHashSalt + clientIp(event)).digest('hex');
+      const ipHash = crypto.createHash('sha256').update(config.ipHashSalt + clientIp(event, config.proxySecret)).digest('hex');
       if (!(await catalog.hitRateLimit(ipHash, config.uploadsPerHour))) {
         throw new HttpError(429, 'Too many uploads. Try again in an hour.');
       }

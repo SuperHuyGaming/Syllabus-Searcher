@@ -46,6 +46,8 @@ module.exports = {
   siteEnvironment: process.env.SITE_ENVIRONMENT || '',
 
   originSecret: process.env.ORIGIN_SECRET || '',
+  // Shared with the Cloudflare proxy (proxy/) so it can pass the visitor's IP.
+  proxySecret: process.env.PROXY_SECRET || '',
   ipHashSalt: process.env.IP_HASH_SALT || '',
   uploadsPerHour: Number(process.env.UPLOADS_PER_HOUR || 5),
 

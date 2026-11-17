@@ -136,6 +136,15 @@ Serves the site at a domain you own (e.g. `syllabus.example.com`) straight from 
 
 Leave both variables unset to keep the plain CloudFront address.
 
+### Your own domain on the AWS Free plan (Cloudflare proxy)
+
+Free-plan AWS accounts are locked to one region, and CloudFront only takes certificates from us-east-1, so the steps above can't be used there. Instead, a small Cloudflare Worker (`proxy/`) serves the domains and forwards every request to the distribution; Cloudflare provides the certificate.
+
+1. In Cloudflare DNS, delete any record for the domains you want (the Worker creates its own).
+2. Workers & Pages → Create → Import a repository → this repo, **root directory `proxy`**, deploy command `npx wrangler deploy`. Hostnames and their distributions are in `proxy/wrangler.jsonc`.
+3. Pick one long random string as the proxy secret. Add it as the GitHub secret `PROXY_SECRET` in each environment, and in the Worker under Settings → Variables and Secrets as a **Secret** named `PROXY_SECRET`. Run **Deploy** for each environment. With the secret set, the API rate-limits uploads by the visitor's IP (`X-Client-Ip`) instead of the proxy's.
+4. Change the environment's `SITE_URL` and the Supabase Site URL / `/admin` redirect URL to the new domain.
+
 ## What runs automatically after that
 
 - **CI**: tests, lint and a Docker build on every push to `develop` or `main` and on every pull request.
