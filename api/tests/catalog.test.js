@@ -94,3 +94,71 @@ describe('last updated status', () => {
     expect(input.UpdateExpression).toBe('SET uploadedAt = :now');
   });
 });
+
+describe('offerings list cache', () => {
+  const offering = (code) => ({ PK: `COURSE#${code}`, SK: `TERM#2025-fall#SEC#001#f-${code}`, code });
+  const throttled = () => Object.assign(new Error('Throughput exceeds the current capacity'), { name: 'ProvisionedThroughputExceededException' });
+
+  // A fake client: scans return `rows` (or throw while `fail` is set); everything else succeeds.
+  function setup() {
+    const state = { rows: [offering('CS310')], fail: false, scans: 0 };
+    const client = fakeClient((name) => {
+      if (name === 'ScanCommand') {
+        state.scans += 1;
+        if (state.fail) throw throttled();
+        return { Items: state.rows };
+      }
+      if (name === 'QueryCommand') return { Items: [] };
+      if (name === 'UpdateCommand') return { Attributes: { hasSyllabi: true } };
+      return {};
+    });
+    return { state, catalog: createCatalog({ client, tableName: 'T' }) };
+  }
+
+  afterEach(() => jest.useRealTimers());
+
+  test('scans once and reuses the list for later and concurrent requests', async () => {
+    const { state, catalog } = setup();
+    const [a, b] = await Promise.all([catalog.listOfferings(), catalog.listOfferings()]);
+    expect(await catalog.listOfferings()).toBe(a);
+    expect(b).toBe(a);
+    expect(state.scans).toBe(1);
+    expect(a.map((o) => o.code)).toEqual(['CS310']);
+  });
+
+  test('scans again after the cache expires', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-17T12:00:00Z') });
+    const { state, catalog } = setup();
+    await catalog.listOfferings();
+    jest.setSystemTime(new Date('2026-11-17T12:06:00Z'));
+    state.rows = [offering('CS310'), offering('CS367')];
+    expect((await catalog.listOfferings()).map((o) => o.code)).toEqual(['CS310', 'CS367']);
+    expect(state.scans).toBe(2);
+  });
+
+  test('serves the last good list when a refresh is throttled', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-17T12:00:00Z') });
+    const { state, catalog } = setup();
+    await catalog.listOfferings();
+    jest.setSystemTime(new Date('2026-11-17T12:06:00Z'));
+    state.fail = true;
+    expect((await catalog.listOfferings()).map((o) => o.code)).toEqual(['CS310']);
+  });
+
+  test('throws when the first scan is throttled and there is nothing to fall back on', async () => {
+    const { state, catalog } = setup();
+    state.fail = true;
+    await expect(catalog.listOfferings()).rejects.toThrow('Throughput');
+    state.fail = false;
+    expect((await catalog.listOfferings()).map((o) => o.code)).toEqual(['CS310']);
+  });
+
+  test('a write clears the cache so the next request sees it', async () => {
+    const { state, catalog } = setup();
+    await catalog.listOfferings();
+    state.rows = [];
+    await catalog.deleteOffering(offering('CS310'));
+    expect(await catalog.listOfferings()).toEqual([]);
+    expect(state.scans).toBe(2);
+  });
+});

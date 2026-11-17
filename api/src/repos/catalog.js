@@ -37,6 +37,8 @@ const rollupRecord = ({ rollup, provider, model, generatedAt, fileIds }) => ({
   fileIds: fileIds || [],
 });
 
+const OFFERINGS_TTL_MS = 5 * 60 * 1000;
+
 function createCatalog({ client, tableName = config.tableName } = {}) {
   const db =
     client ||
@@ -56,6 +58,29 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
     return items;
   }
   const queryAll = (params) => readAll(QueryCommand, params);
+
+  // listOfferings() scans the whole table (the GMU catalog lives in it too), which uses
+  // far more than the table's 5 read units a second. So the result is kept in memory for
+  // a few minutes per Lambda instance, requests that arrive together share one scan, and
+  // if a refresh is throttled the last good list is served instead of an error. Writes
+  // made through this API clear it; scraper writes show up within OFFERINGS_TTL_MS.
+  let offeringsCache = null; // { at, items }
+  let offeringsScan = null;
+  let offeringsGeneration = 0; // bumped by writes, so a scan that started before one isn't cached
+  const clearOfferings = () => {
+    offeringsGeneration += 1;
+    offeringsCache = null;
+    offeringsScan = null;
+  };
+  async function scanOfferings() {
+    const items = await readAll(ScanCommand, {
+      FilterExpression: 'begins_with(SK, :term)',
+      ExpressionAttributeValues: { ':term': 'TERM#' },
+      ProjectionExpression: 'code, title, termKey, termLabel, #section, instructors, fileId, pdfFileId, #source',
+      ExpressionAttributeNames: { '#section': 'section', '#source': 'source' },
+    });
+    return items.map((item) => ({ ...item, display: displayCourse(item.code) }));
+  }
 
   // Marks a course as having syllabi and sets its title, on both the list entry and the course record.
   // Returns true if the course had no syllabi before.
@@ -159,16 +184,27 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       };
     },
 
-    // Every offering in the table, for the professor pages. A scan is fine at one
-    // department's size (a few hundred items), and CloudFront caches the result.
+    // Every offering in the table, for the professor pages (cached, see offeringsCache).
     async listOfferings() {
-      const items = await readAll(ScanCommand, {
-        FilterExpression: 'begins_with(SK, :term)',
-        ExpressionAttributeValues: { ':term': 'TERM#' },
-        ProjectionExpression: 'code, title, termKey, termLabel, #section, instructors, fileId, pdfFileId, #source',
-        ExpressionAttributeNames: { '#section': 'section', '#source': 'source' },
-      });
-      return items.map((item) => ({ ...item, display: displayCourse(item.code) }));
+      if (offeringsCache && Date.now() - offeringsCache.at < OFFERINGS_TTL_MS) return offeringsCache.items;
+      if (!offeringsScan) {
+        const stale = offeringsCache;
+        const generation = offeringsGeneration;
+        const scan = scanOfferings()
+          .then((items) => {
+            if (generation === offeringsGeneration) offeringsCache = { at: Date.now(), items };
+            return items;
+          })
+          .catch((err) => {
+            if (stale) return stale.items;
+            throw err;
+          })
+          .finally(() => {
+            if (offeringsScan === scan) offeringsScan = null;
+          });
+        offeringsScan = scan;
+      }
+      return offeringsScan;
     },
 
     async getCourseMeta(code) {
@@ -182,6 +218,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
     // so catalog details survive; an existing title (the catalog's) is kept.
     // Returns { firstSyllabus: true } if the course had no syllabi before.
     async putOffering({ dept, code, title, term, section, instructors, fileId, contentType, source, sourceUrl }) {
+      clearOfferings();
       const now = new Date().toISOString();
       const firstSyllabus = await touchCourse({ dept, code, title, keepTitle: true });
       await db.send(
@@ -231,6 +268,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
     // Rewrites an offering with new details. Course, term and section are part of the key,
     // so a change to any of them writes a new item and deletes the old one.
     async updateOffering(old, { dept, code, title, term, section, instructors }) {
+      clearOfferings();
       const updated = {
         ...old,
         PK: `COURSE#${code}`,
@@ -253,6 +291,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
 
     // Deletes one offering, and the course itself once it has no syllabi left.
     async deleteOffering(offering) {
+      clearOfferings();
       await db.send(new DeleteCommand({ TableName: tableName, Key: { PK: offering.PK, SK: offering.SK } }));
       const { Items: left = [] } = await db.send(
         new QueryCommand({
