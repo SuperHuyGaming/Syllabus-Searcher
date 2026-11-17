@@ -119,6 +119,7 @@ jobs:
           GITHUB_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
           ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
           IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
+          PROXY_SECRET: ${{ secrets.PROXY_SECRET }}
         run: |
           # SAM rejects "Name=" with an empty value, so optional settings that
           # aren't set (e.g. Azure) are left out and the template defaults apply.
@@ -144,6 +145,7 @@ jobs:
           add SiteEnvironment "${{ needs.target.outputs.environment }}"
           add OriginSecret "$ORIGIN_SECRET"
           add IpHashSalt "$IP_HASH_SALT"
+          add ProxySecret "$PROXY_SECRET"
           add ReservedConcurrency "${{ vars.RESERVED_CONCURRENCY || 0 }}"
           add SiteDomain "${{ vars.SITE_DOMAIN }}"
           add SiteCertificateArn "${{ vars.SITE_CERT_ARN }}"

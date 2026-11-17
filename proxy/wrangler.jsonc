@@ -1,0 +1,20 @@
+{
+	// Serves the site at our own domains by forwarding to each CloudFront distribution.
+	// Deployed by Cloudflare Workers Builds (root directory: proxy). See docs/DEPLOY.md §8.
+	"name": "findmysyllabus-proxy",
+	"main": "src/index.js",
+	"compatibility_date": "2026-11-01",
+	"workers_dev": false,
+	"routes": [
+		{ "pattern": "findmysyllabus.bentruong.dev", "custom_domain": true },
+		{ "pattern": "staging.findmysyllabus.bentruong.dev", "custom_domain": true }
+	],
+	"vars": {
+		"ORIGINS": {
+			"findmysyllabus.bentruong.dev": "d2lwb3ttduhkvw.cloudfront.net",
+			"staging.findmysyllabus.bentruong.dev": "d1vje5j2q42qgc.cloudfront.net"
+		}
+	}
+	// PROXY_SECRET is set as a secret in the Cloudflare dashboard (Settings -> Variables and Secrets),
+	// with the same value as the PROXY_SECRET GitHub secret of each environment.
+}

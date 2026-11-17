@@ -92,6 +92,11 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 8
+  ProxySecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional secret shared with the Cloudflare proxy (proxy/) so the API can trust the visitor IP it forwards
   ReservedConcurrency:
     Type: Number
     Default: 0
@@ -169,6 +174,7 @@ Resources:
           SITE_ENVIRONMENT: !Ref SiteEnvironment
           ORIGIN_SECRET: !Ref OriginSecret
           IP_HASH_SALT: !Ref IpHashSalt
+          PROXY_SECRET: !Ref ProxySecret
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref CatalogTable
@@ -272,7 +278,7 @@ Resources:
         Name: !Sub ${AWS::StackName}-api
         HeadersConfig:
           HeaderBehavior: whitelist
-          Headers: [CloudFront-Viewer-Address, Content-Type]
+          Headers: [CloudFront-Viewer-Address, Content-Type, X-Client-Ip, X-Proxy-Secret]
         QueryStringsConfig:
           QueryStringBehavior: all
         CookiesConfig:

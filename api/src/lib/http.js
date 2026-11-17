@@ -42,8 +42,15 @@ function bodyJson(event) {
 }
 
 // CloudFront sets CloudFront-Viewer-Address ("ip:port") and clients can't forge it.
+// When the site sits behind the Cloudflare proxy (proxy/), CloudFront only sees the
+// proxy's address, so the proxy sends the visitor's IP in X-Client-Ip together with
+// the shared PROXY_SECRET; that header is trusted only when the secret matches.
 // Locally there's no CloudFront, so fall back to the socket address.
-function clientIp(event) {
+function clientIp(event, proxySecret = '') {
+  if (proxySecret && header(event, 'x-proxy-secret') === proxySecret) {
+    const forwarded = (header(event, 'x-client-ip') || '').trim();
+    if (forwarded) return forwarded;
+  }
   const viewer = header(event, 'cloudfront-viewer-address');
   if (viewer) return viewer.slice(0, viewer.lastIndexOf(':'));
   return event.requestContext?.http?.sourceIp || 'unknown';
