@@ -145,6 +145,8 @@ jobs:
           add OriginSecret "$ORIGIN_SECRET"
           add IpHashSalt "$IP_HASH_SALT"
           add ReservedConcurrency "${{ vars.RESERVED_CONCURRENCY || 0 }}"
+          add SiteDomain "${{ vars.SITE_DOMAIN }}"
+          add SiteCertificateArn "${{ vars.SITE_CERT_ARN }}"
           sam build
           sam deploy --no-progressbar --region "$AWS_REGION" --stack-name "$STACK" --parameter-overrides "${params[@]}"
 
