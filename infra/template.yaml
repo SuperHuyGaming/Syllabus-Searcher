@@ -92,6 +92,11 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 8
+  ProxySecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional secret shared with the Cloudflare proxy (proxy/) so the API can trust the visitor IP it forwards
   ReservedConcurrency:
     Type: Number
     Default: 0
@@ -99,7 +104,17 @@ Parameters:
       Caps how many copies of the API can run at once. 0 leaves it unset; new AWS
       accounts often have a total limit of 10 and can't reserve any until AWS raises it.
 
+  SiteDomain:
+    Type: String
+    Default: ''
+    Description: Optional custom domain for the site (e.g. syllabus.example.com). Needs SiteCertificateArn.
+  SiteCertificateArn:
+    Type: String
+    Default: ''
+    Description: ACM certificate ARN for SiteDomain. CloudFront only accepts certificates from us-east-1.
+
 Conditions:
+  HasSiteDomain: !And [!Not [!Equals [!Ref SiteDomain, '']], !Not [!Equals [!Ref SiteCertificateArn, '']]]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
 
 Resources:
@@ -159,6 +174,7 @@ Resources:
           SITE_ENVIRONMENT: !Ref SiteEnvironment
           ORIGIN_SECRET: !Ref OriginSecret
           IP_HASH_SALT: !Ref IpHashSalt
+          PROXY_SECRET: !Ref ProxySecret
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref CatalogTable
@@ -262,7 +278,7 @@ Resources:
         Name: !Sub ${AWS::StackName}-api
         HeadersConfig:
           HeaderBehavior: whitelist
-          Headers: [CloudFront-Viewer-Address, Content-Type]
+          Headers: [CloudFront-Viewer-Address, Content-Type, X-Client-Ip, X-Proxy-Secret]
         QueryStringsConfig:
           QueryStringBehavior: all
         CookiesConfig:
@@ -277,6 +293,13 @@ Resources:
         DefaultRootObject: index.html
         HttpVersion: http2and3
         PriceClass: PriceClass_100
+        Aliases: !If [HasSiteDomain, [!Ref SiteDomain], !Ref AWS::NoValue]
+        ViewerCertificate: !If
+          - HasSiteDomain
+          - AcmCertificateArn: !Ref SiteCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
         Origins:
           - Id: site
             DomainName: !GetAtt SiteBucket.RegionalDomainName
@@ -312,6 +335,8 @@ Resources:
 
 Outputs:
   SiteUrl:
+    Value: !If [HasSiteDomain, !Sub 'https://${SiteDomain}', !Sub 'https://${Distribution.DomainName}']
+  CloudFrontUrl:
     Value: !Sub https://${Distribution.DomainName}
   DistributionId:
     Value: !Ref Distribution

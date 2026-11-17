@@ -125,6 +125,26 @@ A free Render static site gives each environment an easier address than CloudFro
 
 The address bar ends up on CloudFront, so Supabase and `SITE_URL` keep the CloudFront address.
 
+## 8. Your own domain (optional)
+
+Serves the site at a domain you own (e.g. `syllabus.example.com`) straight from CloudFront, so the address bar keeps your domain.
+
+1. **Certificate:** AWS console → Certificate Manager, switched to **us-east-1 (N. Virginia)** (CloudFront only uses certificates from there) → Request → public certificate → your domain → DNS validation. Add the CNAME it shows at your DNS provider (on Cloudflare, set it to **DNS only**) and wait until the status is **Issued**. Copy the certificate ARN.
+2. **GitHub:** Settings → Environments → the environment → add variables `SITE_DOMAIN` (the domain, no `https://`) and `SITE_CERT_ARN` (the ARN). Run **Deploy** for that environment.
+3. **DNS:** add a CNAME from your domain to the distribution's `*.cloudfront.net` address (the stack output `CloudFrontUrl`). On Cloudflare, keep it **DNS only**.
+4. Change the environment's `SITE_URL` variable and the Supabase Site URL / `/admin` redirect URL (step 6 above) to `https://<your domain>`.
+
+Leave both variables unset to keep the plain CloudFront address.
+
+### Your own domain on the AWS Free plan (Cloudflare proxy)
+
+Free-plan AWS accounts are locked to one region, and CloudFront only takes certificates from us-east-1, so the steps above can't be used there. Instead, a small Cloudflare Worker (`proxy/`) serves the domains and forwards every request to the distribution; Cloudflare provides the certificate.
+
+1. In Cloudflare DNS, delete any record for the domains you want (the Worker creates its own).
+2. Workers & Pages → Create → Import a repository → this repo, **root directory `proxy`**, deploy command `npx wrangler deploy`. Hostnames and their distributions are in `proxy/wrangler.jsonc`.
+3. Pick one long random string as the proxy secret. Add it as the GitHub secret `PROXY_SECRET` in each environment, and in the Worker under Settings → Variables and Secrets as a **Secret** named `PROXY_SECRET`. Run **Deploy** for each environment. With the secret set, the API rate-limits uploads by the visitor's IP (`X-Client-Ip`) instead of the proxy's.
+4. Change the environment's `SITE_URL` and the Supabase Site URL / `/admin` redirect URL to the new domain.
+
 ## What runs automatically after that
 
 - **CI**: tests, lint and a Docker build on every push to `develop` or `main` and on every pull request.
