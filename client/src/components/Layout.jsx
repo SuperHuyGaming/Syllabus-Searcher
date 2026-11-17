@@ -4,6 +4,7 @@ import { AppBar, Box, Button, Container, Link, Toolbar, Typography } from '@mui/
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { api } from '../api';
 import { updatedLabel } from '../lib/status';
+import { useVisits } from '../lib/visits';
 import { SchoolPicker, SchoolProvider } from './School';
 
 export default function Layout() {
@@ -18,6 +19,7 @@ function Page() {
   // Nothing is shown until it loads, or if it fails; the rest of the page doesn't wait for it.
   const { data: status } = useQuery({ queryKey: ['status'], queryFn: api.status });
   const updated = updatedLabel(status?.lastUpdated);
+  const visits = useVisits('syllabus', 'findmysyllabus.bentruong.dev');
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -73,6 +75,11 @@ function Page() {
 
       <Box component="footer" sx={{ py: 3, textAlign: 'center', color: 'text.secondary', fontSize: 14 }}>
         {updated && <>Last updated {updated}. </>}
+        {visits && (
+          <>
+            {visits.live} here now, {visits.total.toLocaleString()} visitors.{' '}
+          </>
+        )}
         Not affiliated with any of the schools listed.{' '}
         <Link component={RouterLink} to="/admin" color="inherit">
           Admin
