@@ -2,11 +2,12 @@ import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Button, Card, CardContent, Chip, Link, Skeleton, Stack, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import DescriptionIcon from '@mui/icons-material/Description';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { api } from '../api';
 import SyllabusButtons from '../components/SyllabusButtons';
 import { groupByTerm } from '../lib/terms';
 import { findProfessor } from '../lib/professors';
+import { rateMyProfessorsUrl } from '../lib/links';
 import { useSchool } from '../components/School';
 
 export default function Professor() {
@@ -22,6 +23,7 @@ export default function Professor() {
 
   const professor = findProfessor(data.professors, slug);
   if (!professor) return <Alert severity="info">No professor found. They may be listed under a slightly different name.</Alert>;
+  const rmpUrl = rateMyProfessorsUrl(professor.name, school.key);
 
   return (
     <>
@@ -31,9 +33,22 @@ export default function Professor() {
       <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
         {professor.name}
       </Typography>
-      <Typography color="text.secondary" sx={{ mb: 3 }}>
-        {professor.offerings.length} syllabi across {professor.courses.length} courses
-      </Typography>
+      <Stack direction="row" spacing={2} useFlexGap sx={{ mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Typography color="text.secondary">
+          {professor.offerings.length} syllabi across {professor.courses.length} courses
+        </Typography>
+        {rmpUrl && (
+          <Link
+            href={rmpUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="body2"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+          >
+            Rate My Professors <OpenInNewIcon sx={{ fontSize: 15 }} aria-hidden />
+          </Link>
+        )}
+      </Stack>
 
       <Stack spacing={3}>
         {groupByTerm(professor.offerings).map((group) => (
