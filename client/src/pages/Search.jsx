@@ -6,13 +6,19 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import { api, syllabusUrl } from '../api';
 import Highlight, { searchTerms } from '../components/Highlight';
 import { useSchool } from '../components/School';
-import { displayCourse as display } from '../lib/courses';
+import { DEFAULT_SCHOOL, displayCourse as display } from '../lib/courses';
+import { usePageMeta } from '../lib/seo';
 
 export default function Search() {
   const [params, setParams] = useSearchParams();
   const q = params.get('q') || '';
   const [draft, setDraft] = useState(q);
   const { school } = useSchool();
+  usePageMeta({
+    title: q ? `Search "${q}" in syllabi · ${school.name}` : `Search inside syllabi · ${school.name}`,
+    description: `Full-text search across ${school.short} course syllabi for languages, textbooks, tools, and policies.`,
+    canonical: school.key === DEFAULT_SCHOOL ? '/search' : `/search?school=${school.key}`,
+  });
   const { data, isFetching, error } = useQuery({
     queryKey: ['search', school.key, q],
     queryFn: () => api.search(q, school.key),

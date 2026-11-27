@@ -7,6 +7,7 @@ import HomeSearch from '../components/HomeSearch';
 import { useSchool } from '../components/School';
 import { DEFAULT_SCHOOL } from '../lib/courses';
 import { pickDepartment, sortDepartments } from '../lib/departments';
+import { SITE_NAME, usePageMeta } from '../lib/seo';
 
 export default function Home() {
   const [params, setParams] = useSearchParams();
@@ -33,6 +34,25 @@ export default function Home() {
     withSyllabi,
   };
   const gmu = school.key === DEFAULT_SCHOOL;
+  const deptParam = params.get('dept');
+  const canonicalParams = new URLSearchParams({
+    ...(!gmu && { school: school.key }),
+    ...(deptParam && !(gmu && current.display === 'CS') && { dept: current.display || deptParam }),
+  });
+  const canonical = canonicalParams.size ? `/?${canonicalParams}` : '/';
+  usePageMeta({
+    title:
+      deptParam && current.name
+        ? `${current.display} (${current.name}) syllabi · ${school.name}`
+        : gmu
+          ? `${SITE_NAME} · Past Course Syllabi`
+          : `${school.name} Syllabi · ${SITE_NAME}`,
+    description:
+      deptParam && current.name
+        ? `Browse ${current.name} (${current.display}) courses and past syllabi at ${school.name}.`
+        : `Find past ${school.name} course syllabi by course, department, term, and professor, or search inside syllabi.`,
+    canonical,
+  });
   // The address keeps the school and a department other than the default, so links can be shared.
   const pick = (d) =>
     setParams({ ...(!gmu && { school: school.key }), ...(!(gmu && d.code === 'CS') && { dept: d.display }) });
