@@ -30,6 +30,7 @@ import { groupByTerm, instructorsOf } from '../lib/terms';
 import { DEFAULT_SCHOOL, deptOf, deptPath, displayCourse, schoolOf, withoutSchool } from '../lib/courses';
 import { useSchool } from '../components/School';
 import { professorPath, professorSlug } from '../lib/professors';
+import { provenanceLabel } from '../lib/provenance';
 
 const ALL = 'all';
 const PLACEHOLDER = /^(staff|all|all instructors|all professors|tba)$/i;
@@ -206,6 +207,7 @@ function OfferingCard({ offering: o }) {
   const { school } = useSchool();
   const [open, setOpen] = useState(false);
   const summarized = hasSummary(o.summary?.summary);
+  const provenance = provenanceLabel(o);
   return (
     <Card variant="outlined">
       <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', '&:last-child': { pb: 2 } }}>
@@ -224,11 +226,16 @@ function OfferingCard({ offering: o }) {
               </span>
             ))}
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.75 }}>
             <Chip size="small" label={`Section ${o.section}`} />
             {o.source === 'upload' && <Chip size="small" color="secondary" label="Student upload" />}
             {o.source?.endsWith('-filename') && <Chip size="small" variant="outlined" label="Details from file name" />}
           </Stack>
+          {provenance && (
+            <Typography variant="caption" component="p" color="text.secondary" sx={{ mt: 0.75 }}>
+              {provenance}
+            </Typography>
+          )}
         </Box>
         {summarized && (
           <Button

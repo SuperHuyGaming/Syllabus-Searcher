@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AppBar, Box, Button, Container, Link, Toolbar, Typography } from '@mui/material';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { api } from '../api';
-import { updatedLabel } from '../lib/status';
+import { updatedDetails, updatedLabel } from '../lib/status';
 import { useVisits } from '../lib/visits';
 import { SchoolPicker, SchoolProvider } from './School';
 
@@ -19,6 +19,7 @@ function Page() {
   // Nothing is shown until it loads, or if it fails; the rest of the page doesn't wait for it.
   const { data: status } = useQuery({ queryKey: ['status'], queryFn: api.status });
   const updated = updatedLabel(status?.lastUpdated);
+  const details = updatedDetails(status);
   const visits = useVisits('syllabus', 'findmysyllabus.bentruong.dev');
 
   return (
@@ -74,7 +75,12 @@ function Page() {
       </Container>
 
       <Box component="footer" sx={{ py: 3, textAlign: 'center', color: 'text.secondary', fontSize: 14 }}>
-        {updated && <>Last updated {updated}. </>}
+        {updated && (
+          <Box component="span" title={details || undefined} data-testid="data-last-updated">
+            Data last updated{' '}
+            <time dateTime={status.lastUpdated}>{updated}</time>.{' '}
+          </Box>
+        )}
         {visits && (
           <>
             {visits.live} here now, {visits.total.toLocaleString()} visitors.{' '}

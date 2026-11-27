@@ -47,7 +47,16 @@ describe('summaries in the catalog', () => {
         return {
           Items: [
             { SK: 'META', title: 'Data Structures' },
-            { SK: 'TERM#2024-3#SEC#001#a', termKey: '2024-3', section: '001', instructors: ['Ada'], fileId: 'a' },
+            {
+              SK: 'TERM#2024-3#SEC#001#a',
+              termKey: '2024-3',
+              section: '001',
+              instructors: ['Ada'],
+              fileId: 'a',
+              source: 'gmu-cs',
+              sourceUrl: 'https://cs.gmu.edu/media/syllabi/Fall2024/CS_310.pdf',
+              createdAt: '2026-03-10T12:00:00Z',
+            },
             { SK: 'TERM#2024-3#SEC#002#b', termKey: '2024-3', section: '002', instructors: ['Bo'], fileId: 'b' },
           ],
         };
@@ -56,7 +65,10 @@ describe('summaries in the catalog', () => {
     });
     const course = await createCatalog({ client, tableName: 'T' }).getCourse('CS310');
     expect(course.offerings[0].summary.summary.overview).toBe('About a');
+    expect(course.offerings[0].sourceUrl).toBe('https://cs.gmu.edu/media/syllabi/Fall2024/CS_310.pdf');
+    expect(course.offerings[0].createdAt).toBe('2026-03-10T12:00:00Z');
     expect(course.offerings[1].summary).toBeNull();
+    expect(course.offerings[1]).not.toHaveProperty('sourceUrl');
     expect(course.rollup).toBeNull();
   });
 
