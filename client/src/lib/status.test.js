@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { scrapeRunMessage, updatedLabel } from './status';
+import { scrapeRunMessage, updatedDetails, updatedLabel } from './status';
 
 describe('updatedLabel', () => {
   test('shows the date the way the footer says it', () => {
@@ -12,6 +12,19 @@ describe('updatedLabel', () => {
     expect(updatedLabel(null)).toBe('');
     expect(updatedLabel(undefined)).toBe('');
     expect(updatedLabel('not a date')).toBe('');
+  });
+});
+
+describe('updatedDetails', () => {
+  test('lists scrape and upload dates when available', () => {
+    expect(
+      updatedDetails({
+        scrapedAt: '2026-11-01T12:00:00Z',
+        uploadedAt: '2026-11-03T12:00:00Z',
+      })
+    ).toBe('Last scrape: Nov 1, 2026 · Last approved upload: Nov 3, 2026');
+    expect(updatedDetails({ scrapedAt: '2026-11-01T12:00:00Z' })).toBe('Last scrape: Nov 1, 2026');
+    expect(updatedDetails(null)).toBe('');
   });
 });
 

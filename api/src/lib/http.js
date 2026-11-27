@@ -13,6 +13,14 @@ function json(statusCode, body, headers = {}) {
   };
 }
 
+function xml(body, headers = {}) {
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/xml; charset=utf-8', ...headers },
+    body,
+  };
+}
+
 function binary(buffer, contentType, headers = {}) {
   return {
     statusCode: 200,
@@ -56,4 +64,4 @@ function clientIp(event, proxySecret = '') {
   return event.requestContext?.http?.sourceIp || 'unknown';
 }
 
-module.exports = { HttpError, json, binary, header, bodyBuffer, bodyJson, clientIp };
+module.exports = { HttpError, json, xml, binary, header, bodyBuffer, bodyJson, clientIp };

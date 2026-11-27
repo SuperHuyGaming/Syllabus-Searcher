@@ -42,6 +42,16 @@ function describe({ kind, item }) {
 
 const WHITE_LINK = { color: 'inherit', textDecorationColor: 'inherit', font: 'inherit', fontWeight: 800, verticalAlign: 'baseline' };
 
+const NON_TEXT_INPUTS = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
+
+// True when the focused element accepts typing, so "/" shouldn't hijack it.
+function isEditable(el) {
+  if (!el || el.nodeType !== 1) return false;
+  if (el.isContentEditable || el.closest?.('[contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]')) return true;
+  if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  return el.tagName === 'INPUT' && !NON_TEXT_INPUTS.has((el.type || '').toLowerCase());
+}
+
 // The home page's search, modeled on Rate My Professors: one box that first asks for the
 // school, then finds subjects, courses and professors at it. The picked school is a link
 // in the heading, so changing it is one click. `onSubject` lists a picked subject's courses.
@@ -81,6 +91,18 @@ export default function HomeSearch({ departments, onSubject }) {
   useEffect(() => {
     if (switched.current) inputRef.current?.focus();
   }, [mode]);
+
+  // Pressing "/" anywhere on the home page focuses the search box unless typing elsewhere.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      if (isEditable(e.target) || isEditable(document.activeElement)) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   const switchTo = (next) => {
     switched.current = true;
     setInput('');

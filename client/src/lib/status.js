@@ -6,6 +6,17 @@ export function updatedLabel(iso) {
   return time.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Breakdown tooltip for the footer's "Data last updated" indicator.
+export function updatedDetails(status) {
+  if (!status) return '';
+  const parts = [];
+  const scraped = updatedLabel(status.scrapedAt);
+  const uploaded = updatedLabel(status.uploadedAt);
+  if (scraped) parts.push(`Last scrape: ${scraped}`);
+  if (uploaded) parts.push(`Last approved upload: ${uploaded}`);
+  return parts.join(' · ');
+}
+
 // One line about the latest Scrape syllabi run on /admin, e.g. "Running since Nov 5, 2026"
 // or "Last run Nov 5, 2026 finished". Empty when the site has never been scraped.
 export function scrapeRunMessage(run) {

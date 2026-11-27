@@ -154,19 +154,23 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       if (!meta) return null;
       const offerings = items
         .filter((item) => item.SK.startsWith('TERM#'))
-        .map(({ SK, termKey, termLabel, section, instructors, title, fileId, pdfFileId, contentType, source }) => ({
-          id: SK,
-          termKey,
-          termLabel,
-          section,
-          instructors,
-          title,
-          fileId,
-          // HTML syllabi get a PDF copy from the scraper (scraper/syllabus_scraper/pdf.py).
-          pdfFileId,
-          contentType,
-          source,
-        }));
+        .map(
+          ({ SK, termKey, termLabel, section, instructors, title, fileId, pdfFileId, contentType, source, sourceUrl, createdAt }) => ({
+            id: SK,
+            termKey,
+            termLabel,
+            section,
+            instructors,
+            title,
+            fileId,
+            // HTML syllabi get a PDF copy from the scraper (scraper/syllabus_scraper/pdf.py).
+            pdfFileId,
+            contentType,
+            source,
+            ...(sourceUrl && { sourceUrl }),
+            ...(createdAt && { createdAt }),
+          })
+        );
       const [summaries, rollup] = await Promise.all([
         this.getSummaries(offerings.map((o) => o.fileId)),
         this.getRollup(code),

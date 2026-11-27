@@ -5,6 +5,8 @@ import { Alert, Button, MenuItem, Paper, Stack, TextField, Typography } from '@m
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { api } from '../api';
 import { recentTerms } from '../lib/terms';
+import { DEFAULT_SCHOOL } from '../lib/courses';
+import { usePageMeta } from '../lib/seo';
 import { CourseField, ProfessorField } from '../components/CourseFields';
 import { useSchool } from '../components/School';
 
@@ -17,6 +19,11 @@ const TERMS = recentTerms();
 export default function Upload() {
   const [params] = useSearchParams();
   const { school, schools } = useSchool();
+  usePageMeta({
+    title: `Upload a syllabus · ${school.name}`,
+    description: `Share a PDF or HTML course syllabus for ${school.name}. No account needed.`,
+    canonical: school.key === DEFAULT_SCHOOL ? '/upload' : `/upload?school=${school.key}`,
+  });
   const [form, setForm] = useState({
     course: params.get('course') || '',
     term: TERMS[0].label,

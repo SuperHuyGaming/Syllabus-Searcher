@@ -16,11 +16,17 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import { api } from '../api';
 import { matchProfessors, professorPath } from '../lib/professors';
-import { displayCourse as display } from '../lib/courses';
+import { DEFAULT_SCHOOL, displayCourse as display } from '../lib/courses';
+import { usePageMeta } from '../lib/seo';
 import { useSchool } from '../components/School';
 
 export default function Professors() {
   const { school } = useSchool();
+  usePageMeta({
+    title: `Professors · ${school.name}`,
+    description: `Browse every ${school.short} professor with a syllabus on file and the courses they have taught.`,
+    canonical: school.key === DEFAULT_SCHOOL ? '/professors' : `/professors?school=${school.key}`,
+  });
   const { data, isPending, error } = useQuery({
     queryKey: ['professors', school.key],
     queryFn: () => api.professors(school.key),

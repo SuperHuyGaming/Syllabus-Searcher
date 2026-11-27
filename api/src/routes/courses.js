@@ -1,12 +1,16 @@
-const { json, binary, HttpError } = require('../lib/http');
+const config = require('../config');
+const { json, xml, binary, HttpError } = require('../lib/http');
 const { normalizeCourse, displayCourse, schoolOf, deptOf, deptKey, withoutSchool, DEFAULT_SCHOOL } = require('../lib/terms');
 const { mergeCourses, mergeCourse } = require('../lib/courselist');
 const { groupByProfessor } = require('../lib/professors');
+const { buildSitemap, newerIso, resolveSiteUrl } = require('../lib/sitemap');
 
 // Browsers re-check every time (max-age=0), so an admin's approve or edit shows up
 // on the next page load. CloudFront shares one copy for up to a minute, which keeps
 // Lambda calls to about one per page per minute.
 const CATALOG_CACHE = { 'Cache-Control': 'public, max-age=0, s-maxage=60' };
+// Sitemap changes only on scrapes or approved uploads; CloudFront caches it for an hour.
+const SITEMAP_CACHE = { 'Cache-Control': 'public, max-age=0, s-maxage=3600' };
 // File ids never get reused, so a syllabus file can be cached forever.
 const FILE_CACHE = { 'Cache-Control': 'public, max-age=31536000, immutable' };
 // Scraped HTML syllabi are untrusted: sandbox them so their scripts can't run on our domain.
@@ -116,6 +120,20 @@ module.exports = ({ catalog, departments, files, search }) => {
         const school = await schoolParam(query);
         const offerings = (await catalog.listOfferings()).filter((o) => schoolOf(o.code) === school);
         return json(200, { school, professors: groupByProfessor(offerings) }, CATALOG_CACHE);
+      },
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/sitemap\.xml$/,
+      async handler({ event }) {
+        const [schools, offerings, status] = await Promise.all([
+          departments.schools(),
+          catalog.listOfferings(),
+          catalog.getStatus(),
+        ]);
+        const lastUpdated = newerIso(status?.scrapedAt, status?.uploadedAt);
+        const baseUrl = resolveSiteUrl(event, config.siteUrl);
+        return xml(buildSitemap({ baseUrl, schools, offerings, lastUpdated }), SITEMAP_CACHE);
       },
     },
     {

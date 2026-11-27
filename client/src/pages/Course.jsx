@@ -18,9 +18,9 @@ import {
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import DescriptionIcon from '@mui/icons-material/Description';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SummarizeIcon from '@mui/icons-material/Summarize';
 import { api } from '../api';
 import SyllabusButtons from '../components/SyllabusButtons';
@@ -30,6 +30,9 @@ import { groupByTerm, instructorsOf } from '../lib/terms';
 import { DEFAULT_SCHOOL, deptOf, deptPath, displayCourse, schoolOf, withoutSchool } from '../lib/courses';
 import { useSchool } from '../components/School';
 import { professorPath, professorSlug } from '../lib/professors';
+import { provenanceLabel } from '../lib/provenance';
+import { catalogCourseUrl, rateMyProfessorsUrl, removalRequestUrl } from '../lib/links';
+import { courseJsonLd, courseMeta, usePageMeta } from '../lib/seo';
 
 const ALL = 'all';
 const PLACEHOLDER = /^(staff|all|all instructors|all professors|tba)$/i;
@@ -54,6 +57,12 @@ export default function Course() {
     [offerings, term, instructor]
   );
 
+  usePageMeta(
+    course
+      ? { ...courseMeta(course, school), jsonLd: courseJsonLd(course, school) }
+      : { title: `${displayCourse(code)} syllabus · ${school.name}`, canonical: `/courses/${code}` }
+  );
+
   if (isPending) return <Skeleton variant="rounded" height={240} />;
   if (error) {
     return (
@@ -76,7 +85,7 @@ export default function Course() {
       <Typography variant="h6" component="p" color="text.secondary" sx={{ mb: 2 }}>
         {course.title}
       </Typography>
-      <CourseDetails course={course} />
+      <CourseDetails course={course} school={school} />
 
       {offerings.length === 0 ? (
         <Stack spacing={2}>
@@ -101,14 +110,28 @@ export default function Course() {
   );
 }
 
-// Credits, catalog description and prerequisites, for courses in the official catalog.
-function CourseDetails({ course }) {
-  if (!course.description && !course.credits && !course.prereqs) return null;
+// Credits, catalog description, prerequisites and official catalog link.
+function CourseDetails({ course, school }) {
+  const catalogUrl = catalogCourseUrl(course.code);
+  if (!course.description && !course.credits && !course.prereqs && !catalogUrl) return null;
   return (
     <Box sx={{ mb: 3 }}>
-      {course.credits && (
-        <Chip size="small" label={`${course.credits} credit${course.credits === '1' ? '' : 's'}`} sx={{ mb: 1 }} />
-      )}
+      <Stack direction="row" spacing={1.5} useFlexGap sx={{ mb: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+        {course.credits && (
+          <Chip size="small" label={`${course.credits} credit${course.credits === '1' ? '' : 's'}`} />
+        )}
+        {catalogUrl && (
+          <Link
+            href={catalogUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="body2"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+          >
+            {school.short} Catalog <OpenInNewIcon sx={{ fontSize: 15 }} aria-hidden />
+          </Link>
+        )}
+      </Stack>
       {course.description && <Typography sx={{ mb: 1 }}>{course.description}</Typography>}
       {course.prereqs && (
         <Typography variant="body2" color="text.secondary">
@@ -156,7 +179,7 @@ function CourseSyllabi({ code, display, rollup, term, setTerm, terms, instructor
             </Typography>
             <Stack spacing={1}>
               {group.offerings.map((o) => (
-                <OfferingCard key={o.fileId + o.section} offering={o} />
+                <OfferingCard key={o.fileId + o.section} offering={o} courseCode={code} courseDisplay={display} />
               ))}
             </Stack>
           </Box>
@@ -202,32 +225,78 @@ function CourseRollup({ display, record }) {
   );
 }
 
-function OfferingCard({ offering: o }) {
+function OfferingCard({ offering: o, courseCode, courseDisplay }) {
   const { school } = useSchool();
   const [open, setOpen] = useState(false);
   const summarized = hasSummary(o.summary?.summary);
+  const provenance = provenanceLabel(o);
+  const removalUrl = removalRequestUrl({
+    code: courseCode,
+    display: courseDisplay,
+    termLabel: o.termLabel,
+    section: o.section,
+    instructors: o.instructors,
+    fileId: o.fileId,
+    id: o.id,
+  });
   return (
     <Card variant="outlined">
       <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', '&:last-child': { pb: 2 } }}>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Typography sx={{ fontWeight: 600 }}>
-            {o.instructors.map((name, i) => (
-              <span key={name}>
-                {i > 0 && '; '}
-                {PLACEHOLDER.test(name) ? (
-                  name
-                ) : (
-                  <Link component={RouterLink} to={professorPath(professorSlug(name), school.key)} color="inherit">
-                    {name}
-                  </Link>
-                )}
-              </span>
-            ))}
+            {o.instructors.map((name, i) => {
+              const rmpUrl = PLACEHOLDER.test(name) ? null : rateMyProfessorsUrl(name, school.key);
+              return (
+                <span key={name}>
+                  {i > 0 && '; '}
+                  {PLACEHOLDER.test(name) ? (
+                    name
+                  ) : (
+                    <>
+                      <Link component={RouterLink} to={professorPath(professorSlug(name), school.key)} color="inherit">
+                        {name}
+                      </Link>
+                      {rmpUrl && (
+                        <>
+                          {' '}
+                          <Link
+                            href={rmpUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="caption"
+                            color="text.secondary"
+                            aria-label={`Search ${name} on Rate My Professors`}
+                            sx={{ fontWeight: 400, whiteSpace: 'nowrap' }}
+                          >
+                            (RMP)
+                          </Link>
+                        </>
+                      )}
+                    </>
+                  )}
+                </span>
+              );
+            })}
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.75 }}>
             <Chip size="small" label={`Section ${o.section}`} />
             {o.source === 'upload' && <Chip size="small" color="secondary" label="Student upload" />}
             {o.source?.endsWith('-filename') && <Chip size="small" variant="outlined" label="Details from file name" />}
+          </Stack>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
+            {provenance && (
+              <Typography variant="caption" color="text.secondary">
+                {provenance}
+              </Typography>
+            )}
+            {provenance && (
+              <Typography variant="caption" color="text.secondary" aria-hidden>
+                ·
+              </Typography>
+            )}
+            <Link href={removalUrl} variant="caption" color="text.secondary">
+              Are you the instructor? Request removal
+            </Link>
           </Stack>
         </Box>
         {summarized && (
