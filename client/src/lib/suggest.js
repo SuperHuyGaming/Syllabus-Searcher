@@ -1,4 +1,4 @@
-import { deptOfText } from './courses';
+import { deptOfText, normalizeCourse, withoutSchool } from './courses';
 import { matchProfessors } from './professors';
 
 // Suggestions for the home page's one search box, the way Rate My Professors works:
@@ -55,12 +55,41 @@ export function matchSubjects(departments, text, limit = 5) {
     .map((x) => x.d);
 }
 
+// Courses matching a code ("CS310", "cs 310", "cs-310") or title words ("data struct").
+// Exact course code matches come first, then code prefixes, then title word starts,
+// then title substrings, preserving list order within each tier.
+export function matchCourses(courses, text, limit = 5) {
+  const trimmed = String(text || '').trim();
+  const typed = words(trimmed);
+  if (typed.length === 0) return [];
+  const normalized = normalizeCourse(trimmed);
+  const exact = normalized ? withoutSchool(normalized) : null;
+  const compact = plain(trimmed).replace(/[^a-z0-9]/g, '').toUpperCase();
+  const codeLike = /^[A-Z]{2,5}\d{0,4}[A-Z]?$/.test(compact);
+  const rank = (c) => {
+    const bare = withoutSchool(c.code).toUpperCase();
+    if ((exact && bare === exact) || (codeLike && bare === compact)) return 0;
+    if (codeLike && bare.startsWith(compact)) return 1;
+    if (startsWords(c.title, typed)) return 2;
+    const title = plain(c.title);
+    if (typed.every((w) => title.includes(w))) return 3;
+    return null;
+  };
+  return courses
+    .map((c, i) => ({ c, i, r: rank(c) }))
+    .filter((x) => x.r !== null)
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .slice(0, limit)
+    .map((x) => x.c);
+}
+
 // The box's list in subject mode, each with its `kind` for grouping and what it opens.
 // Typed text with a digit ("cs 310") is a course, so courses come first; otherwise subjects.
 export function subjectSuggestions({ departments = [], courses = [], professors = [], text = '' }) {
   const trimmed = text.trim();
   const subjects = matchSubjects(departments, trimmed, 4).map((d) => ({ kind: 'Subjects', key: `d:${d.code}`, item: d }));
-  const found = trimmed.length >= 2 ? courses.slice(0, 5).map((c) => ({ kind: 'Courses', key: `c:${c.code}`, item: c })) : [];
+  const found =
+    trimmed.length >= 2 ? matchCourses(courses, trimmed, 5).map((c) => ({ kind: 'Courses', key: `c:${c.code}`, item: c })) : [];
   const people =
     words(trimmed).some((w) => /^[a-z]{2,}$/.test(w)) && !/\d/.test(trimmed)
       ? matchProfessors(professors, trimmed, 3).map((p) => ({ kind: 'Professors', key: `p:${p.slug}`, item: p }))

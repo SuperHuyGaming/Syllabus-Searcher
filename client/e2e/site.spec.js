@@ -64,6 +64,20 @@ test('the search box finds professors by name', async ({ page }) => {
   await expect(page).toHaveURL(/\/professors\/gonzalez-samudio-david$/);
 });
 
+test('pressing / focuses the home search box and accepts compact or hyphenated course codes', async ({ page }) => {
+  await page.goto('/?school=gmu');
+  await page.getByRole('heading', { name: /All Computer Science courses/ }).click();
+  await expect(box(page)).not.toBeFocused();
+  await page.keyboard.press('/');
+  await expect(box(page)).toBeFocused();
+  await expect(box(page)).toHaveValue('');
+
+  await box(page).fill('cs-310');
+  await expect(page.getByRole('option').first()).toContainText('CS 310');
+  await box(page).press('Enter');
+  await expect(page).toHaveURL(/\/courses\/CS310$/);
+});
+
 test('a course page links back to its department', async ({ page }) => {
   await page.goto('/courses/CS310');
   await page.getByRole('link', { name: 'All CS courses' }).click();
