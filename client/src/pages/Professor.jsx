@@ -8,6 +8,7 @@ import SyllabusButtons from '../components/SyllabusButtons';
 import { groupByTerm } from '../lib/terms';
 import { findProfessor } from '../lib/professors';
 import { rateMyProfessorsUrl } from '../lib/links';
+import { professorMeta, usePageMeta } from '../lib/seo';
 import { useSchool } from '../components/School';
 
 export default function Professor() {
@@ -17,11 +18,12 @@ export default function Professor() {
     queryKey: ['professors', school.key],
     queryFn: () => api.professors(school.key),
   });
+  const professor = data ? findProfessor(data.professors, slug) : null;
+  usePageMeta(professor ? professorMeta(professor, school) : { title: `Professor · ${school.name}` });
 
   if (isPending) return <Skeleton variant="rounded" height={240} />;
   if (error) return <Alert severity="error">{error.message}</Alert>;
 
-  const professor = findProfessor(data.professors, slug);
   if (!professor) return <Alert severity="info">No professor found. They may be listed under a slightly different name.</Alert>;
   const rmpUrl = rateMyProfessorsUrl(professor.name, school.key);
 

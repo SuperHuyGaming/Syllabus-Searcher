@@ -32,6 +32,7 @@ import { useSchool } from '../components/School';
 import { professorPath, professorSlug } from '../lib/professors';
 import { provenanceLabel } from '../lib/provenance';
 import { catalogCourseUrl, rateMyProfessorsUrl, removalRequestUrl } from '../lib/links';
+import { courseJsonLd, courseMeta, usePageMeta } from '../lib/seo';
 
 const ALL = 'all';
 const PLACEHOLDER = /^(staff|all|all instructors|all professors|tba)$/i;
@@ -54,6 +55,12 @@ export default function Course() {
         )
       ),
     [offerings, term, instructor]
+  );
+
+  usePageMeta(
+    course
+      ? { ...courseMeta(course, school), jsonLd: courseJsonLd(course, school) }
+      : { title: `${displayCourse(code)} syllabus · ${school.name}`, canonical: `/courses/${code}` }
   );
 
   if (isPending) return <Skeleton variant="rounded" height={240} />;
