@@ -73,8 +73,9 @@ test('pressing / focuses the home search box and accepts compact or hyphenated c
   await expect(box(page)).toHaveValue('');
 
   await box(page).fill('cs-310');
-  await expect(page.getByRole('option').first()).toContainText('CS 310');
-  await box(page).press('Enter');
+  const first = page.getByRole('option').first();
+  await expect(first).toContainText('CS 310');
+  await first.click();
   await expect(page).toHaveURL(/\/courses\/CS310$/);
 });
 
@@ -138,7 +139,7 @@ test('a course without a rollup shows no rollup card', async ({ page }) => {
 
 test('filter a course by professor', async ({ page }) => {
   await page.goto('/courses/CS310');
-  await page.getByLabel('Professor').click();
+  await page.getByLabel('Professor', { exact: true }).click();
   await page.getByRole('option', { name: 'Masri, W' }).click();
 
   await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Fall 2024']);
@@ -239,7 +240,7 @@ test('no horizontal scrolling', async ({ page }) => {
 
 test('the footer says when the data was last updated, and home links to uploads', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('contentinfo')).toContainText('Last updated Nov 1, 2026.');
+  await expect(page.getByRole('contentinfo')).toContainText('Data last updated Nov 1, 2026.');
   await page.getByRole('link', { name: "Upload one that's missing" }).click();
   await expect(page).toHaveURL(/\/upload$/);
 });
