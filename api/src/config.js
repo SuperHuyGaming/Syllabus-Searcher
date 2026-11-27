@@ -44,6 +44,7 @@ module.exports = {
   githubToken: process.env.GITHUB_DISPATCH_TOKEN || '',
   githubRepo: process.env.GITHUB_REPO || '',
   siteEnvironment: process.env.SITE_ENVIRONMENT || '',
+  siteUrl: (process.env.SITE_URL || '').replace(/\/+$/, ''),
 
   originSecret: process.env.ORIGIN_SECRET || '',
   // Shared with the Cloudflare proxy (proxy/) so it can pass the visitor's IP.
