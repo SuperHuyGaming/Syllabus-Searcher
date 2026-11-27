@@ -25,7 +25,7 @@ from urllib.parse import unquote, urlsplit
 
 from dotenv import load_dotenv
 
-from syllabus_scraper import cehd, cos, listings, math, sources
+from syllabus_scraper import cehd, chss, cos, listings, math, sources
 from syllabus_scraper.catalog import fetch_catalog, fetch_departments
 from syllabus_scraper.schools import SCHOOLS
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
@@ -34,9 +34,15 @@ from syllabus_scraper.store import Store, detect_content_type
 from syllabus_scraper.listings import MAX_FILE_BYTES, mentions_course
 
 # Departments with a listing source (syllabus_scraper/listings.py), by --sources name.
-LISTING_SOURCES = {"math": math.rows, "science": cos.rows, "cehd": cehd.rows}
-# Sources that keep what they read from pages that never change (the archive's) in the database.
-CACHED_SOURCES = {"cehd"}
+LISTING_SOURCES = {
+    "math": math.rows,
+    "science": cos.rows,
+    "cehd": cehd.rows,
+    "chss": chss.chss_rows,
+    "masonkorea": chss.masonkorea_rows,
+}
+# Sources that keep what they read from historical pages that no longer change in the database.
+CACHED_SOURCES = {"cehd", "chss", "masonkorea"}
 
 log = logging.getLogger("scraper")
 
@@ -133,6 +139,8 @@ def main(argv=None):
     parser.add_argument("--limit", type=int, default=0, help="Stop after this many new files (per source)")
     parser.add_argument("--sources", default="cs," + ",".join(LISTING_SOURCES),
                         help='Syllabus sources to scrape, e.g. "math" (default: cs and every listing source)')
+    parser.add_argument("--host", default="", help='Only scrape this CHSS host, e.g. "historyarthistory.gmu.edu"')
+    parser.add_argument("--term", default="", help='Only scrape this CHSS/Mason Korea term, e.g. "Fall 2025" or "202570"')
     parser.add_argument("--html", nargs="*", help="Parse saved listing pages instead of fetching the index")
     parser.add_argument("--no-filenames", action="store_true", help="Skip the pass that guesses details from file names")
     parser.add_argument("--delay", type=float, default=1.0, help="Seconds between requests")
@@ -189,12 +197,16 @@ def main(argv=None):
                 return
 
     def run_listings():
-        """Departments with a listing source: Math (math.py), the College of Science (cos.py), CEHD (cehd.py)."""
+        """Departments with a listing source: Math (math.py), College of Science (cos.py), CEHD (cehd.py), CHSS and Mason Korea (chss.py)."""
         for name in wanted_sources:
             if name not in LISTING_SOURCES:
                 continue
-            cache = {"cache": store} if name in CACHED_SOURCES else {}
-            items = list(LISTING_SOURCES[name](fetcher, listings.SINCE, **cache))
+            kwargs = {"cache": store} if name in CACHED_SOURCES else {}
+            if name == "chss" and args.host:
+                kwargs["hosts"] = args.host
+            if name in ("chss", "masonkorea") and args.term:
+                kwargs["term"] = args.term
+            items = list(LISTING_SOURCES[name](fetcher, listings.SINCE, **kwargs))
             chosen = listings.choose(items)
             log.info("%s: %d syllabi listed, %d to keep", name, len(items), len(chosen))
             if args.dry_run:
