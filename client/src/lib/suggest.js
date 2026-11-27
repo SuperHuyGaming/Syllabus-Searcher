@@ -35,10 +35,10 @@ export function matchSchools(schools, text, limit = 6) {
 
 // Departments whose code starts with the typed text ("cs", "math 113" -> MATH) or whose name
 // matches its words ("comp sci"). An exact code comes first, then other code matches,
-// then name matches, each in the list's order. With nothing typed, the first few.
+// then name matches, each in the list's order. With nothing typed, every subject A to Z.
 export function matchSubjects(departments, text, limit = 5) {
   const typed = words(text);
-  if (typed.length === 0) return departments.slice(0, limit);
+  if (typed.length === 0) return [...departments].sort((a, b) => a.name.localeCompare(b.name));
   const code = deptOfText(text);
   const course = /\d/.test(text);
   const rank = (d) => {
@@ -59,7 +59,7 @@ export function matchSubjects(departments, text, limit = 5) {
 // Typed text with a digit ("cs 310") is a course, so courses come first; otherwise subjects.
 export function subjectSuggestions({ departments = [], courses = [], professors = [], text = '' }) {
   const trimmed = text.trim();
-  const subjects = matchSubjects(departments, trimmed, trimmed ? 4 : 6).map((d) => ({ kind: 'Subjects', key: `d:${d.code}`, item: d }));
+  const subjects = matchSubjects(departments, trimmed, 4).map((d) => ({ kind: 'Subjects', key: `d:${d.code}`, item: d }));
   const found = trimmed.length >= 2 ? courses.slice(0, 5).map((c) => ({ kind: 'Courses', key: `c:${c.code}`, item: c })) : [];
   const people =
     words(trimmed).some((w) => /^[a-z]{2,}$/.test(w)) && !/\d/.test(trimmed)

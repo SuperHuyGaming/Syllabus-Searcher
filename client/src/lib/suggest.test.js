@@ -13,6 +13,8 @@ const departments = [
   { code: 'CSI', display: 'CSI', name: 'Computational and Data Sciences', withSyllabi: 0 },
   { code: 'MATH', display: 'MATH', name: 'Mathematics', withSyllabi: 0 },
   { code: 'ECE', display: 'ECE', name: 'Electrical and Computer Engineering', withSyllabi: 0 },
+  { code: 'ACCT', display: 'ACCT', name: 'Accounting', withSyllabi: 0 },
+  { code: 'BIOL', display: 'BIOL', name: 'Biology', withSyllabi: 0 },
 ];
 
 describe('matchSchools', () => {
@@ -50,8 +52,12 @@ describe('matchSubjects', () => {
     expect(matchSubjects(departments, 'math113').map((d) => d.code)).toEqual(['MATH']);
   });
 
-  test('shows the first few with nothing typed', () => {
-    expect(matchSubjects(departments, '', 2).map((d) => d.code)).toEqual(['CS', 'SWE']);
+  test('lists all subjects alphabetically with nothing typed', () => {
+    expect(matchSubjects(departments, '').map((d) => d.code)).toEqual(['ACCT', 'BIOL', 'CSI', 'CS', 'ECE', 'MATH', 'SWE']);
+  });
+
+  test('still respects the limit while typing', () => {
+    expect(matchSubjects(departments, 'comp', 2).map((d) => d.code)).toEqual(['CS', 'CSI']);
   });
 });
 
@@ -70,8 +76,10 @@ describe('subjectSuggestions', () => {
     expect(kinds(subjectSuggestions({ departments, courses, professors, text: 'cs 310' }))).toEqual(['Courses', 'Subjects']);
   });
 
-  test('only subjects before anything is typed', () => {
-    expect(kinds(subjectSuggestions({ departments, courses, professors, text: '' }))).toEqual(Array(5).fill('Subjects'));
+  test('lists every subject alphabetically before anything is typed', () => {
+    const list = subjectSuggestions({ departments, courses, professors, text: '' });
+    expect(kinds(list)).toEqual(Array(departments.length).fill('Subjects'));
+    expect(list.map((s) => s.item.code)).toEqual(['ACCT', 'BIOL', 'CSI', 'CS', 'ECE', 'MATH', 'SWE']);
   });
 
   test('keys are unique across kinds', () => {
