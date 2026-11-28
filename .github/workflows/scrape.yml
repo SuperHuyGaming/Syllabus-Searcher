@@ -33,6 +33,13 @@ on:
         description: Also reload every school's course catalog
         type: boolean
         default: true
+      search_budget:
+        description: Daily Google Custom Search query budget for the search source (blank = default)
+        default: ''
+      coverage:
+        description: Also refresh the syllabus coverage report
+        type: boolean
+        default: false
 
 jobs:
   scrape:
@@ -65,7 +72,14 @@ jobs:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_URI_2: ${{ secrets.MONGODB_URI_2 }}
           MONGODB_URI_3: ${{ secrets.MONGODB_URI_3 }}
-          # New files go to the site's Supabase Storage first (syllabus_scraper/pool.py).
+          # New files go to the storage pool: Cloudflare R2 (9.95 GB hard cap), Supabase Storage, then Atlas (syllabus_scraper/pool.py).
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+          GOOGLE_SEARCH_API_KEY: ${{ secrets.GOOGLE_SEARCH_API_KEY }}
+          GOOGLE_SEARCH_CX: ${{ secrets.GOOGLE_SEARCH_CX }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           STORAGE_BUDGET_MB: ${{ vars.STORAGE_BUDGET_MB || (matrix.environment == 'staging' && '120' || '') }}
@@ -78,4 +92,4 @@ jobs:
         run: |
           pip install -r requirements.txt
           playwright install --with-deps chromium
-          python scrape.py --since "${{ inputs.since || 'Fall 2022' }}" --sources "${{ inputs.sources || (matrix.environment == 'staging' && 'cs,math,science' || 'cs,math,science,cehd') }}" --limit "${{ inputs.limit || '400' }}" ${{ inputs.catalog == false && '--no-catalog' || '' }} ${{ inputs.move_files != '' && format('--move-files {0}', inputs.move_files) || '' }}
+          python scrape.py --since "${{ inputs.since || 'Fall 2022' }}" --sources "${{ inputs.sources || (matrix.environment == 'staging' && 'cs,math,science' || 'cs,math,science,cehd') }}" --limit "${{ inputs.limit || '400' }}" ${{ inputs.catalog == false && '--no-catalog' || '' }} ${{ inputs.move_files != '' && format('--move-files {0}', inputs.move_files) || '' }} ${{ inputs.search_budget != '' && format('--search-budget {0}', inputs.search_budget) || '' }} ${{ inputs.coverage == true && '--coverage' || '' }}

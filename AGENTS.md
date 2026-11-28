@@ -18,9 +18,11 @@ These rules apply to every AI agent working in this repository (Claude, Gemini/A
 - **Cloudflare R2 hard cap: 9.95 GB** (9,950,000,000 bytes). The free tier is 10 GB-month of storage, 1 million Class A (write/list) and 10 million Class B (read) operations per month; anything above is billed.
   - Code that writes to R2 must measure the bucket's current size first and refuse the write (treat R2 as full: fall through to the next storage option or stop) when it would go past 9.95 GB.
   - Keep monthly operations under **950,000 Class A** and **9,500,000 Class B**.
+  - Implementation: `scraper/syllabus_scraper/pool.py` enforces the 9.95 GB byte cap via MongoDB `stored_files` aggregation and tracks monthly Class A/B operation counters in the `r2_usage` collection (refusing operations at 950k Class A / 9.5M Class B); all caps are hard-coded constants in `pool.py` with no environment-variable override.
   - Never raise these limits, remove the check, or enable paid R2 features without the owner's explicit approval.
 - MongoDB Atlas M0: 512 MB (scraper budget 470 MB). Supabase Storage: 950 MB per project. Check usage before bulk scrapes.
 - Prefer **link-only storage** (a record pointing at a stable public URL such as GMU's file host, no copy) over copying files.
+- Studocu and Course Hero results are hints only: never download, store or link their files.
 - Don't add paid services.
 
 ## Always
