@@ -1,5 +1,5 @@
 const { ObjectId } = require('mongodb');
-const { createFiles } = require('../src/repos/files');
+const { createFiles, isAllowedLink } = require('../src/repos/files');
 
 // A GridFS bucket stand-in holding { id: { filename, metadata, data } }.
 function fakeBucket(files) {
@@ -99,5 +99,133 @@ describe('files in Supabase Storage', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     expect(await files.read('syllabi', inSupabase)).toBeNull();
     console.error.mockRestore();
+  });
+});
+
+describe('link-only files', () => {
+  const linkedId = new ObjectId().toHexString();
+  const storedId = new ObjectId().toHexString();
+  const LINK_URL = 'https://d101vc9winf8ln.cloudfront.net/syllabuses/12345/original/hist100.pdf';
+
+  function fakeStoredWithLink() {
+    const records = {
+      [linkedId]: {
+        _id: new ObjectId(linkedId),
+        filename: 'hist100.pdf',
+        length: 54321,
+        metadata: { contentType: 'application/pdf', sourceUrl: LINK_URL },
+        link: LINK_URL,
+        uploadDate: new Date('2026-11-01T00:00:00Z'),
+      },
+      [storedId]: {
+        _id: new ObjectId(storedId),
+        filename: 'stored.pdf',
+        length: 1234,
+        metadata: { contentType: 'application/pdf', sourceUrl: 'https://cs.gmu.edu/a.pdf' },
+      },
+    };
+    const objects = { [storedId]: Buffer.from('bytes') };
+    const removeBlob = jest.fn((id) => {
+      delete objects[id];
+    });
+    return {
+      records,
+      objects,
+      removeBlob,
+      find: jest.fn(async (objectId) => records[objectId.toHexString()] || null),
+      findLinked: jest.fn(async (objectIds) =>
+        objectIds.map((oid) => records[oid.toHexString()]).filter((doc) => doc && doc.link)
+      ),
+      download: jest.fn(async (id) => objects[id] || null),
+      remove: jest.fn(async (objectId, { linkOnly = false } = {}) => {
+        if (!linkOnly) removeBlob(objectId.toHexString());
+        delete records[objectId.toHexString()];
+      }),
+    };
+  }
+
+  test('reads a linked file without downloading bytes', async () => {
+    const stored = fakeStoredWithLink();
+    const files = createFiles({ db: {}, pool: [], makeBucket, stored });
+    const file = await files.read('syllabi', linkedId);
+    expect(file).toEqual({
+      link: LINK_URL,
+      filename: 'hist100.pdf',
+      contentType: 'application/pdf',
+      metadata: { contentType: 'application/pdf', sourceUrl: LINK_URL },
+    });
+    expect(file.buffer).toBeUndefined();
+    expect(stored.download).not.toHaveBeenCalled();
+    expect(await files.read('pending', linkedId)).toBeNull();
+  });
+
+  test('removing a linked file deletes only the stored_files record, not blob storage', async () => {
+    const stored = fakeStoredWithLink();
+    const files = createFiles({ db: {}, pool: [], makeBucket, stored });
+    await files.remove('syllabi', linkedId);
+    expect(stored.records[linkedId]).toBeUndefined();
+    expect(stored.remove).toHaveBeenCalledWith(new ObjectId(linkedId), { linkOnly: true });
+    expect(stored.removeBlob).not.toHaveBeenCalled();
+
+    // Removing a non-linked Supabase file still removes the blob.
+    await files.remove('syllabi', storedId);
+    expect(stored.remove).toHaveBeenCalledWith(new ObjectId(storedId), { linkOnly: false });
+    expect(stored.removeBlob).toHaveBeenCalledWith(storedId);
+  });
+
+  test('linkedIds returns only the linked file ids and tolerates bad ids or errors', async () => {
+    const stored = fakeStoredWithLink();
+    const files = createFiles({ db: {}, pool: [], makeBucket, stored });
+    const ids = await files.linkedIds([linkedId, storedId, linkedId, 'not-an-id', null, undefined]);
+    expect([...ids]).toEqual([linkedId]);
+    expect((await files.linkedIds([])).size).toBe(0);
+
+    stored.findLinked.mockRejectedValueOnce(new Error('down'));
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await files.linkedIds([linkedId])).size).toBe(0);
+    console.error.mockRestore();
+  });
+
+  test('move returns null for a linked record with no buffer', async () => {
+    const stored = fakeStoredWithLink();
+    const files = createFiles({ db: {}, pool: [], makeBucket, stored });
+    jest.spyOn(files, 'read').mockResolvedValueOnce({ link: LINK_URL, filename: 'hist100.pdf', contentType: 'application/pdf' });
+    expect(await files.move('pending', 'syllabi', linkedId)).toBeNull();
+  });
+});
+
+describe('isAllowedLink host allowlist', () => {
+  test.each([
+    'https://d101vc9winf8ln.cloudfront.net/syllabuses/12345/original/hist100.pdf',
+    'https://D101VC9WINF8LN.CLOUDFRONT.NET/syllabuses/1/original/a.pdf',
+    'https://gmu.edu/syllabus.pdf',
+    'https://historyarthistory.gmu.edu/course_sections/123.pdf',
+    'https://masonkorea.gmu.edu/syllabi/test.pdf',
+    'https://sub.dept.gmu.edu/path/file.pdf?v=1',
+  ])('allows %s', (url) => {
+    expect(isAllowedLink(url)).toBe(true);
+  });
+
+  test.each([
+    'http://d101vc9winf8ln.cloudfront.net/syllabuses/1/original/a.pdf',
+    'http://historyarthistory.gmu.edu/a.pdf',
+    'https://evilgmu.edu/a.pdf',
+    'https://gmu.edu.evil.com/a.pdf',
+    'https://sub.d101vc9winf8ln.cloudfront.net/a.pdf',
+    'https://other.cloudfront.net/a.pdf',
+    'https://.gmu.edu/a.pdf',
+    'https://gmu.edu./a.pdf',
+    'https://evil.com@gmu.edu/a.pdf',
+    'https://gmu.edu:8443/a.pdf',
+    'javascript:alert(1)',
+    '//gmu.edu/a.pdf',
+    'https://gmu.edu/a.pdf\r\nX-Injected: 1',
+    ' https://gmu.edu/a.pdf',
+    '',
+    null,
+    undefined,
+    'not-a-url',
+  ])('rejects %p', (url) => {
+    expect(isAllowedLink(url)).toBe(false);
   });
 });

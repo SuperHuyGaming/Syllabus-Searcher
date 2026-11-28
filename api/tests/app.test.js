@@ -109,6 +109,7 @@ function fakes() {
     files: {
       save: jest.fn().mockResolvedValue(FILE_ID),
       read: jest.fn().mockResolvedValue({ buffer: PDF, contentType: 'application/pdf', filename: 'a.pdf' }),
+      linkedIds: jest.fn().mockResolvedValue(new Set()),
       move: jest.fn().mockResolvedValue({ id: FILE_ID, contentType: 'application/pdf' }),
       remove: jest.fn().mockResolvedValue(),
       ping: jest.fn().mockResolvedValue(),
@@ -310,6 +311,61 @@ describe('catalog routes', () => {
     deps.files.read.mockResolvedValue({ buffer: Buffer.from('<p>hi</p>'), contentType: 'text/html', filename: 'a.html' });
     const res = await createApp(deps)(event('GET', `/api/syllabi/${FILE_ID}`));
     expect(res.headers['Content-Security-Policy']).toMatch(/sandbox/);
+  });
+
+  test('redirects linked syllabi on allowed hosts with a short cache', async () => {
+    const deps = fakes();
+    const link = 'https://d101vc9winf8ln.cloudfront.net/syllabuses/99/original/hist100.pdf';
+    deps.files.read.mockResolvedValue({ link, contentType: 'application/pdf', filename: 'hist100.pdf' });
+    const res = await createApp(deps)(event('GET', `/api/syllabi/${FILE_ID}`));
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.Location).toBe(link);
+    expect(res.headers['Cache-Control']).toBe('public, max-age=300');
+    expect(res.body).toBe('');
+    expect(res.isBase64Encoded).toBeUndefined();
+
+    const gmuLink = 'https://historyarthistory.gmu.edu/syllabi/hist100.pdf';
+    deps.files.read.mockResolvedValue({ link: gmuLink, contentType: 'application/pdf', filename: 'hist100.pdf' });
+    const gmuRes = await createApp(deps)(event('GET', `/api/syllabi/${FILE_ID}`));
+    expect(gmuRes.statusCode).toBe(302);
+    expect(gmuRes.headers.Location).toBe(gmuLink);
+  });
+
+  test.each([
+    'http://d101vc9winf8ln.cloudfront.net/syllabuses/99/original/hist100.pdf',
+    'https://evilgmu.edu/hist100.pdf',
+    'https://gmu.edu.evil.com/hist100.pdf',
+    'https://example.com/hist100.pdf',
+  ])('404s linked syllabi pointing to disallowed URL %s', async (badLink) => {
+    const deps = fakes();
+    deps.files.read.mockResolvedValue({ link: badLink, contentType: 'application/pdf', filename: 'hist100.pdf' });
+    const res = await createApp(deps)(event('GET', `/api/syllabi/${FILE_ID}`));
+    expect(res.statusCode).toBe(404);
+    expect(res.headers.Location).toBeUndefined();
+  });
+
+  test('marks linked offerings on public and admin course responses', async () => {
+    const deps = fakes();
+    const OTHER_ID = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+    deps.catalog.getCourse.mockResolvedValue({
+      code: 'HIST100',
+      title: 'History of Western Civilization',
+      offerings: [
+        { id: 'TERM#2025-3#SEC#001', fileId: FILE_ID, source: 'gmu-chss', sourceUrl: 'https://historyarthistory.gmu.edu/a' },
+        { id: 'TERM#2024-3#SEC#001', fileId: OTHER_ID, source: 'upload' },
+      ],
+    });
+    deps.files.linkedIds.mockResolvedValue(new Set([FILE_ID]));
+
+    const pub = parse(await createApp(deps)(event('GET', '/api/courses/HIST100')));
+    expect(pub.offerings[0].linked).toBe(true);
+    expect(pub.offerings[1].linked).toBeUndefined();
+
+    const adm = parse(
+      await createApp(deps)(event('GET', '/api/admin/courses/HIST100', { headers: { authorization: 'Bearer good' } }))
+    );
+    expect(adm.offerings[0].linked).toBe(true);
+    expect(adm.offerings[1].linked).toBeUndefined();
   });
 });
 
@@ -724,6 +780,21 @@ describe('admin fixes to published syllabi', () => {
     const failed = await app(post(`/api/admin/summaries/${FILE_ID}/regenerate`, {}));
     expect(failed.statusCode).toBe(503);
     expect(parse(failed).error).toMatch(/quota/);
+  });
+
+  test('regenerating a linked syllabus returns 503 without reading bytes or calling AI', async () => {
+    const deps = fakes();
+    deps.catalog.offeringsForFile.mockResolvedValue([OFFERING]);
+    deps.files.read.mockResolvedValue({
+      link: 'https://d101vc9winf8ln.cloudfront.net/syllabuses/99/original/hist100.pdf',
+      contentType: 'application/pdf',
+      filename: 'hist100.pdf',
+    });
+    const res = await createApp(deps)(post(`/api/admin/summaries/${FILE_ID}/regenerate`, {}));
+    expect(res.statusCode).toBe(503);
+    expect(parse(res).error).toMatch(/Linked syllabi/);
+    expect(deps.readText).not.toHaveBeenCalled();
+    expect(deps.summarize).not.toHaveBeenCalled();
   });
 
   test('deleting an HTML syllabus also deletes its PDF copy', async () => {
