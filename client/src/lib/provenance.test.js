@@ -139,6 +139,26 @@ describe('provenanceLabel', () => {
     expect(provenanceOf({ termLabel: 'Fall 2025', source: 'gmu-chss' }).isLinked).toBe(false);
   });
 
+  test('formats SEOR and the Internet Archive harvests (ECE, IT/AIT, IST)', () => {
+    expect(
+      provenanceLabel({
+        termLabel: 'Fall 2009',
+        source: 'gmu-ece',
+        sourceUrl: 'https://web.archive.org/web/20100619022456id_/https://ece.gmu.edu/coursewebpages/ECE/ECE535/ECE535_F09.pdf',
+      })
+    ).toBe('Fall 2009 · from ece.gmu.edu (Internet Archive)');
+    expect(provenanceLabel({ termLabel: 'Fall 2006', source: 'gmu-ite' })).toBe(
+      'Fall 2006 · from ite.gmu.edu (Internet Archive)'
+    );
+    expect(
+      provenanceLabel({
+        termLabel: 'Fall 2015',
+        source: 'gmu-seor',
+        sourceUrl: 'https://www3.gmu.edu/schools/vse/seor/syllabi/15F/OR441.pdf',
+      })
+    ).toBe('Fall 2015 · from www3.gmu.edu');
+  });
+
   test('formats CS, CEHD, Math, Science/COS, and Internet Archive sources', () => {
     expect(provenanceLabel({ termLabel: 'Spring 2025', source: 'gmu-cs' })).toBe(
       'Spring 2025 · from cs.gmu.edu (Internet Archive)'

@@ -27,7 +27,7 @@ from urllib.parse import unquote, urlsplit
 
 from dotenv import load_dotenv
 
-from syllabus_scraper import cehd, chss, cos, coverage, listings, math, search, sources
+from syllabus_scraper import cehd, chss, cos, coverage, listings, math, search, seor, sources, wayback
 from syllabus_scraper.catalog import fetch_catalog, fetch_departments
 from syllabus_scraper.schools import SCHOOLS
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
@@ -42,9 +42,13 @@ LISTING_SOURCES = {
     "cehd": cehd.rows,
     "chss": chss.chss_rows,
     "masonkorea": chss.masonkorea_rows,
+    "seor": seor.rows,
+    # Old department folders found through the Internet Archive (syllabus_scraper/wayback.py).
+    **{key: wayback.source(key) for key in wayback.HARVESTS},
 }
-# Sources that keep what they read from historical pages that no longer change in the database.
-CACHED_SOURCES = {"cehd", "chss", "masonkorea"}
+# Sources that get the store: to keep what they read from pages that no longer change, and to
+# drop courses missing from the catalog (seor and the archive harvests).
+CACHED_SOURCES = {"cehd", "chss", "masonkorea", "seor", *wayback.HARVESTS}
 # Sources whose files stay on their public host; only a link (plus text and summary) is stored.
 LINK_ONLY_SOURCES = {"chss", "masonkorea"}
 

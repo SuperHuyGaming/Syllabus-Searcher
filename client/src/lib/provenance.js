@@ -15,6 +15,11 @@ const KNOWN_SOURCES = {
   'gmu-cehd': { host: 'cehd.gmu.edu', archived: true },
   'gmu-chss': { host: 'chss.gmu.edu', archived: false },
   'gmu-masonkorea': { host: 'masonkorea.gmu.edu', archived: false },
+  'gmu-seor': { host: 'seor.gmu.edu', archived: false },
+  'gmu-ece': { host: 'ece.gmu.edu', archived: true },
+  'gmu-ite': { host: 'ite.gmu.edu', archived: true },
+  'gmu-ist': { host: 'ist.gmu.edu', archived: true },
+  'gmu-schar': { host: 'schar.gmu.edu', archived: false },
 };
 
 export function isArchiveUrl(url) {

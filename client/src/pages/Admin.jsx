@@ -736,6 +736,11 @@ const SOURCES = {
   'gmu-cehd': 'Scraped (CEHD)',
   'gmu-chss': 'Scraped (CHSS)',
   'gmu-masonkorea': 'Scraped (Mason Korea)',
+  'gmu-seor': 'Scraped (SEOR)',
+  'gmu-ece': 'Scraped (ECE, Internet Archive)',
+  'gmu-ite': 'Scraped (IT/AIT, Internet Archive)',
+  'gmu-ist': 'Scraped (IST, Internet Archive)',
+  'gmu-schar': 'Scraped (Schar)',
 };
 
 function OfferingRow({ code, offering, token }) {
