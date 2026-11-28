@@ -6,7 +6,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import { api, syllabusUrl } from '../api';
 import Highlight, { searchTerms } from '../components/Highlight';
 import { useSchool } from '../components/School';
-import { DEFAULT_SCHOOL, displayCourse as display } from '../lib/courses';
+import { DEFAULT_SCHOOL, displayCourse as display, formatOfferingLabel } from '../lib/courses';
 import { usePageMeta } from '../lib/seo';
 
 export default function Search() {
@@ -82,7 +82,9 @@ export default function Search() {
                     <Typography component="span">{r.title}</Typography>
                   </Stack>
                   <Typography variant="body2" color="text.secondary">
-                    {r.termLabel} · Section {r.section} · {r.instructors.join(', ')}
+                    {formatOfferingLabel(r.codes.map(display).join(', '), r.termLabel, r.topic)}
+                    {r.section ? ` · Section ${r.section}` : ''}
+                    {r.instructors?.length ? ` · ${r.instructors.join(', ')}` : ''}
                   </Typography>
                   <Typography variant="body2" sx={{ my: 1.5, overflowWrap: 'anywhere' }}>
                     <Highlight text={r.snippet} terms={terms} />

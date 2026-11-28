@@ -959,3 +959,75 @@ describe('admin refresh', () => {
     expect(parse(res).error).toBe('GitHub answered 401: Bad credentials');
   });
 });
+
+describe('coverage and syllabus hints', () => {
+  const auth = { authorization: 'Bearer good' };
+
+  test('GET /api/admin/coverage requires admin auth', async () => {
+    const app = createApp(fakes());
+    expect((await app(event('GET', '/api/admin/coverage'))).statusCode).toBe(401);
+    expect((await app(event('GET', '/api/admin/coverage', { headers: { authorization: 'Bearer bad' } }))).statusCode).toBe(403);
+  });
+
+  test('GET /api/admin/coverage returns coverage report and hints for admins', async () => {
+    const deps = fakes();
+    const report = {
+      school: 'gmu',
+      computedAt: '2026-11-28T10:00:00Z',
+      totals: { courses: 50, withSyllabi: 20, withoutSyllabi: 30 },
+      departments: [{ dept: 'MATH', courses: 30, withSyllabi: 5, withoutSyllabi: 25, missingCourses: ['MATH 113'] }],
+    };
+    const hints = [
+      {
+        code: 'MATH 113',
+        school: 'gmu',
+        url: 'https://www.studocu.com/en-us/document/gmu/math-113',
+        title: 'MATH 113 Syllabus',
+        snippet: 'Calculus I syllabus',
+        host: 'studocu.com',
+        foundAt: '2026-11-27T00:00:00Z',
+      },
+    ];
+    deps.coverage = {
+      getCoverage: jest.fn().mockResolvedValue(report),
+      listHints: jest.fn().mockResolvedValue(hints),
+      hasOnlineHint: jest.fn().mockResolvedValue(true),
+    };
+    const res = await createApp(deps)(event('GET', '/api/admin/coverage', { headers: auth }));
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['Cache-Control']).toBe('no-store');
+    expect(deps.coverage.getCoverage).toHaveBeenCalledWith('gmu');
+    expect(deps.coverage.listHints).toHaveBeenCalledWith('gmu');
+    expect(parse(res)).toEqual({ school: 'gmu', coverage: report, hints });
+  });
+
+  test('GET /api/admin/coverage handles missing coverage doc gracefully and respects ?school', async () => {
+    const deps = fakes();
+    deps.coverage = {
+      getCoverage: jest.fn().mockResolvedValue(null),
+      listHints: jest.fn().mockResolvedValue([]),
+      hasOnlineHint: jest.fn().mockResolvedValue(false),
+    };
+    const res = await createApp(deps)(event('GET', '/api/admin/coverage', { headers: auth, query: { school: 'unc' } }));
+    expect(res.statusCode).toBe(200);
+    expect(deps.coverage.getCoverage).toHaveBeenCalledWith('unc');
+    expect(parse(res)).toEqual({ school: 'unc', coverage: null, hints: [] });
+  });
+
+  test('GET /api/courses/:code returns boolean hasOnlineHint and never leaks hint URLs', async () => {
+    const deps = fakes();
+    deps.coverage = {
+      hasOnlineHint: jest.fn(async (code) => code === 'MATH113'),
+    };
+    const app = createApp(deps);
+    const withHint = await app(event('GET', '/api/courses/MATH113'));
+    expect(withHint.statusCode).toBe(200);
+    const bodyWithHint = parse(withHint);
+    expect(bodyWithHint.hasOnlineHint).toBe(true);
+    expect(withHint.body).not.toMatch(/studocu|coursehero|hints/i);
+
+    const withoutHint = await app(event('GET', '/api/courses/CS310'));
+    expect(withoutHint.statusCode).toBe(200);
+    expect(parse(withoutHint).hasOnlineHint).toBe(false);
+  });
+});

@@ -51,6 +51,7 @@ export const api = {
   saveSummary: (fileId, summary, token) => post(`/admin/summaries/${fileId}`, { summary }, token),
   regenerateSummary: (fileId, token) => post(`/admin/summaries/${fileId}/regenerate`, {}, token),
   adminProfessors: (token, school) => json(`/admin/professors?${withSchool({}, school)}`, { token }),
+  adminCoverage: (token, school) => json(`/admin/coverage?${withSchool({}, school)}`, { token }),
   // Without `apply` this is a preview: it lists what would change and writes nothing.
   scrapeStatus: (token) => json('/admin/refresh', { token }),
   startScrape: (token) => post('/admin/refresh', {}, token),

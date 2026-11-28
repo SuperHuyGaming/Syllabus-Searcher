@@ -75,19 +75,17 @@ function createSearch({ db } = {}) {
         return;
       }
       const [first] = offerings;
-      await collection.updateOne(
-        { _id: fileId },
-        {
-          $set: {
-            codes: [...new Set(offerings.map((o) => o.code))].sort(),
-            title: first.title,
-            termKey: first.termKey,
-            termLabel: first.termLabel,
-            section: first.section,
-            instructors: [...new Set(offerings.flatMap((o) => o.instructors))],
-          },
-        }
-      );
+      const set = {
+        codes: [...new Set(offerings.map((o) => o.code))].sort(),
+        title: first.title,
+        termKey: first.termKey,
+        termLabel: first.termLabel,
+        section: first.section,
+        instructors: [...new Set(offerings.flatMap((o) => o.instructors))],
+      };
+      const topic = offerings.find((o) => o.topic)?.topic;
+      const update = topic ? { $set: { ...set, topic } } : { $set: set, $unset: { topic: '' } };
+      await collection.updateOne({ _id: fileId }, update);
     },
   };
 }

@@ -10,6 +10,7 @@
 // courses, and the DynamoDB table's small provisioned capacity is kept for the syllabi.
 const config = require('../config');
 const { getDb } = require('./files');
+const { createCoverage } = require('./coverage');
 const { displayCourse, withoutSchool, schoolOf, DEFAULT_SCHOOL } = require('../lib/terms');
 
 const SEARCH_LIMIT = 20;
@@ -33,8 +34,12 @@ const courseOf = ({ _id, dept, title, credits, description, prereqs }) => ({
 function createDepartments({ db } = {}) {
   const database = () => (db ? Promise.resolve(db) : getDb());
   const collection = async (name) => (await database()).collection(name);
+  const coverage = createCoverage({ db });
 
   return {
+    getCoverage: (school) => coverage.getCoverage(school),
+    listHints: (school) => coverage.listHints(school),
+    hasOnlineHint: (code) => coverage.hasOnlineHint(code),
     // Every school, GMU first, then A to Z. GMU is listed even before its catalog loads.
     async schools() {
       const docs = await (await collection('schools')).find({}).toArray();

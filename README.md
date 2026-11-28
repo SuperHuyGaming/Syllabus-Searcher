@@ -2,12 +2,12 @@
 
 Look up any GMU course, see which professors taught it each term (Fall 2022 onward), and open their syllabus. No login needed. Most syllabi so far are Computer Science, from the CS department's old syllabus page; other departments fill in through student uploads. Other schools are listed too (Georgia Tech, Old Dominion, UNC Chapel Hill): pick one in the header to browse its course catalog and upload its syllabi.
 
-- **By course**: every course in GMU's official catalog (about 170 departments), with credits, description and prerequisites. Search a code or title across departments, or pick a department on the home page (`/?dept=MATH`), then filter syllabi by term and professor. Courses with no syllabus yet ask students to upload one.
+- **By course**: every course in GMU's official catalog (about 170 departments), with credits, description and prerequisites. Search a code or title across departments, or pick a department on the home page (`/?dept=MATH`), then filter syllabi by term and professor. Special-topics courses (such as CS 499 or other rotating-topic numbers) keep each offering's individual topic title so students can tell sections apart. Courses with no syllabus yet ask students to upload one.
 - **By professor**: search by first or last name and see every course and term they have a syllabus for. Full names are read from the syllabi when the department listing only gives an initial.
 - **Inside syllabi**: full-text search for a language, textbook or policy (`Python`, `"late policy"`), with highlighted snippets.
 - **Uploads**: students can add missing syllabi as a PDF or, when the professor posted it as a web page, an HTML file; an admin approves them before they show up. Uploaded PDFs are rebuilt page by page with scripts, auto-run actions and attachments removed; encrypted or unreadable files are refused. The admin reviews each file on the page (PDFs drawn with pdf.js, with the page text alongside), so it never opens in a desktop reader. Every upload is virus-scanned with ClamAV: locally a ClamAV container scans it on arrival and refuses infected files; on the deployed sites the **Virus scan** workflow (`api/scripts/virus-scan.js`) scans pending uploads every two hours. The admin card shows the result, and a flagged upload can only be rejected.
 - **PDF for every syllabus**: syllabi that exist only as web pages get a PDF copy (printed by headless Chromium with scripts and network off), shown as a "PDF" button.
-- **Admin fixes**: at `/admin`, correct an upload's course, term, section or professor before approving, move, edit or delete any published syllabus, merge two spellings of one professor across every syllabus at once, and start a re-scrape with **Refresh now** (Site data tab, needs the optional `GH_DISPATCH_TOKEN` secret). Fixes to scraped syllabi survive the weekly re-scrape.
+- **Admin fixes**: at `/admin`, correct an upload's course, term, section or professor before approving, move, edit or delete any published syllabus, merge two spellings of one professor across every syllabus at once, inspect department/course syllabus gaps on the **Coverage** tab, and start a re-scrape with **Refresh now** (Site data tab, needs the optional `GH_DISPATCH_TOKEN` secret). Fixes to scraped syllabi survive the weekly re-scrape.
 
 ## How it fits together
 
@@ -117,7 +117,48 @@ CEHD (education, kinesiology, health, sport, recreation and tourism) listed ever
 
 CHSS (College of Humanities and Social Sciences) department sites and Mason Korea share a live "Courses and Syllabi" app (`chss.py`): `https://<host>/course_sections?code=<SUBJ>&term=<YYYYTT>` for CHSS departments (Economics, History & Art History, Psychology, Philosophy, Criminology, Religious Studies, Women & Gender Studies, English, Communication, Sociology & Anthropology, Global Affairs, Integrative Studies, and Honors) and `https://masonkorea.gmu.edu/course_sections?term=<YYYYTT>` for all Mason Korea sections on one page per term, where `TT` is `10` (Spring), `40` (Summer) or `70` (Fall). Course, section, title and instructor come from each row and the term from the URL, linking public files on `d101vc9winf8ln.cloudfront.net/syllabuses/<section_id>/original/`. Duplicate sections across hosts are dropped by `section_id`; completed historical terms are cached in `listing_pages` while the current term is re-crawled on each run as late uploads arrive. Both `chss` and `masonkorea` use **link-only storage**: their syllabus files stay on GMU's public host (`d101vc9winf8ln.cloudfront.net`) rather than being copied into our storage pool, while the scraper still downloads each file temporarily to index its search text and build a rules summary. Run these sources with `python scrape.py --sources chss --no-catalog` (optionally `--host <host> --term <YYYYTT>`) or `python scrape.py --sources masonkorea --no-catalog`.
 
-New sources like these go through a shared path (`scraper/syllabus_scraper/listings.py`): it drops repeats, keeps every syllabus for MATH and CS but only the newest one per course in other subjects, and writes a summary picked out of the text by rules (`rules.py`: grading breakdown, textbook, prerequisites, tools, late work, attendance and AI policies), because free AI tiers can't keep up with thousands of files. Those summaries say "Picked out of the syllabus text automatically (no AI)"; Regenerate in /admin still asks the AI for any one file. For sources that store copies (`cs`, `math`, `science`, `cehd`, and student uploads), files go to the storage pool (`pool.py`): the site's Supabase Storage first (bucket `syllabi`, 1 GB free per project, filled to 950 MB), then the Atlas clusters (the main one, then any extra in `MONGODB_URI_2`, `MONGODB_URI_3`; docs/DEPLOY.md, step 2). Link-only sources (`chss` and `masonkorea`) store no file bytes in the pool—only a small link record in `stored_files` that never counts toward any storage cap, so `/api/syllabi/<id>` redirects directly to GMU's public host (`d101vc9winf8ln.cloudfront.net`) while search text and rules summaries remain indexed in our database. The main Atlas cluster also holds the search text and student uploads, so it is kept for those; `--move-files MB` (workflow input `move_files`) moves files already on Atlas to Supabase Storage, keeping their ids. Each run downloads at most `--limit` new files per source (400 in the workflow) and stops cleanly when storage is full; the next run continues.
+New sources like these go through a shared path (`scraper/syllabus_scraper/listings.py`): it drops repeats, keeps every syllabus for MATH and CS (and distinct topics for special-topics courses) but only the newest one per course in other subjects, and writes a summary picked out of the text by rules (`rules.py`: grading breakdown, textbook, prerequisites, tools, late work, attendance and AI policies), because free AI tiers can't keep up with thousands of files. Those summaries say "Picked out of the syllabus text automatically (no AI)"; Regenerate in /admin still asks the AI for any one file.
+
+### Storage pool & Cloudflare R2 (9.95 GB hard cap)
+
+For sources that store copies (`cs`, `math`, `science`, `cehd`, `search`, and student uploads), files go to the storage pool (`scraper/syllabus_scraper/pool.py`): **Cloudflare R2** first (when `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and `R2_PUBLIC_URL` are set), then the site's **Supabase Storage** (bucket `syllabi`, 1 GB free per project, filled to 950 MB), then the **MongoDB Atlas** clusters (the main one, then any extra in `MONGODB_URI_2`, `MONGODB_URI_3`; docs/DEPLOY.md, step 2).
+
+To guarantee the site never incurs R2 charges, `pool.py` enforces hard-coded limits with no environment-variable override:
+- **9.95 GB** (9,950,000,000 bytes) hard storage cap, measured before every write by aggregating `length` across R2 records in MongoDB `stored_files`. When a write would exceed 9.95 GB, R2 is treated as full and the pool falls through to the next storage tier or stops cleanly.
+- **950,000 Class A** (write/list) and **9,500,000 Class B** (read) monthly operation caps, tracked in the MongoDB `r2_usage` collection (staying below Cloudflare's 1M / 10M free-tier limits).
+
+Link-only sources (`chss` and `masonkorea`) store no file bytes in the pool—only a small link record in `stored_files` that never counts toward any storage cap, so `/api/syllabi/<id>` redirects directly to GMU's public host (`d101vc9winf8ln.cloudfront.net`) while search text and rules summaries remain indexed in our database. The main Atlas cluster also holds the search text and student uploads, so it is kept for those; `--move-files MB` (workflow input `move_files`) moves files already on Atlas to Supabase Storage, keeping their ids. Each run downloads at most `--limit` new files per source (400 in the workflow) and stops cleanly when storage is full; the next run continues.
+
+### Discovery search source, Studocu/Course Hero hints & Coverage
+
+- **`search` discovery source**: runs targeted web queries via Google Custom Search (`GOOGLE_SEARCH_API_KEY`, `GOOGLE_SEARCH_CX`) to find publicly hosted GMU syllabi outside the department listing pages. It is manual-only (never enabled on the weekly schedule) and respects a daily query budget (`--search-budget`, or the `search_budget` workflow input) to stay within the free tier. Run with `python scrape.py --sources search --no-catalog --search-budget 50`.
+- **Studocu and Course Hero hints**: when discovery encounters Studocu or Course Hero results, they are recorded as **hints only** to show that a syllabus likely exists somewhere for a missing course—the scraper never downloads, stores, or links their files.
+- **Coverage report (`--coverage`) & Admin Coverage tab**: passing `--coverage` (or checking `coverage` in the **Scrape syllabi** manual workflow) computes per-department and per-course syllabus coverage and saves it for the `/admin` **Coverage** tab, where admins can see which departments and courses still need syllabi and view any discovery hints.
+
+### Local archive (`scraper/archive.py`)
+
+`scraper/archive.py` mirrors every syllabus from the public site API into a local folder using only Python's standard library and `requests` (no database credentials needed):
+
+```bash
+cd scraper
+python archive.py --dest E:\SyllabusArchive
+```
+
+Options: `--api` (default `https://findmysyllabus.bentruong.dev`), `--school` (e.g. `gmu,unc`), `--dept` (e.g. `CS,MATH`), `--delay` (default `1.0` second between requests). Files are saved to:
+
+```text
+<dest>/<school>/<DEPT>/<CODE>/<Term> - <Section> - <Instructor>.<ext>
+```
+
+with Windows-safe filenames, alongside `<dest>/catalog.csv` (`code, title, term, section, instructors, source, sourceUrl, fileId, savedPath`). Re-runs are incremental: files already on disk with the same size are skipped without re-downloading.
+
+To keep the local archive updated automatically on Windows with **Task Scheduler**:
+1. Open **Task Scheduler** → **Create Basic Task...** (e.g. `Syllabus Archive`), set the trigger to **Weekly**.
+2. Choose **Start a program**:
+   - **Program/script**: full path to Python (e.g. `C:\path\to\repo\scraper\.venv\Scripts\python.exe`)
+   - **Add arguments**: `archive.py --dest E:\SyllabusArchive`
+   - **Start in**: `C:\path\to\repo\scraper`
+3. Finish and optionally enable **Run task as soon as possible after a scheduled start is missed** under Settings.
 
 Student uploads fill the remaining gaps. If GMU posts syllabi somewhere new, add a source module like `scraper/syllabus_scraper/math.py` and list it in `LISTING_SOURCES` in `scrape.py`.
 

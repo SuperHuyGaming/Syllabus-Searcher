@@ -52,6 +52,13 @@ export function deptOfText(text) {
   return match ? match[1].toUpperCase() : null;
 }
 
+// "CS 399 · Fall 2026 · AI, Technology & Society" when a special-topics offering
+// has a topic, or "CS 399 · Fall 2026" when it doesn't.
+export function formatOfferingLabel(courseDisplay, termLabel, topic) {
+  const cleanTopic = String(topic || '').trim();
+  return [courseDisplay, termLabel, cleanTopic].filter(Boolean).join(' · ');
+}
+
 // Where a course's page and its department's list live.
 export const coursePath = (code) => `/courses/${code}`;
 export function deptPath(dept) {

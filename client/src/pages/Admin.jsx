@@ -32,6 +32,7 @@ import { aiCheckMessage } from '../lib/aicheck';
 import { scrapeRunMessage, updatedLabel } from '../lib/status';
 import { POLICIES, formToSummary, hasSummary, summaryCredit, summaryToForm } from '../lib/summary';
 import { CourseField, ProfessorField, useCourseLookup } from '../components/CourseFields';
+import CoverageTab from '../components/CoverageTab';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 // Admins may need to fix syllabi older than the upload form's Fall 2022 cutoff.
@@ -143,11 +144,13 @@ function Dashboard({ token, email }) {
         <Tab value="pending" label={count ? `Pending uploads (${count})` : 'Pending uploads'} />
         <Tab value="published" label="Published syllabi" />
         <Tab value="professors" label="Professors" />
+        <Tab value="coverage" label="Coverage" />
         <Tab value="data" label="Site data" />
       </Tabs>
       {tab === 'pending' && <ReviewQueue token={token} />}
       {tab === 'published' && <Published token={token} />}
       {tab === 'professors' && <Professors token={token} />}
+      {tab === 'coverage' && <CoverageTab token={token} />}
       {tab === 'data' && <SiteData token={token} />}
     </>
   );

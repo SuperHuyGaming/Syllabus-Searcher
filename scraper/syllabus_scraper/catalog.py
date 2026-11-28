@@ -16,6 +16,8 @@ from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
+from .topics import is_special_topics_course
+
 INDEX_URL = "https://catalog.gmu.edu/courses/"
 
 # "CS 310", "COMP 110.", "CS 1301R"
@@ -118,8 +120,12 @@ def parse_catalog(page, dept="CS"):
         credits = re.search(CREDITS, heading, re.IGNORECASE)
 
         desc_node = block.select_one(".courseblockdesc, .courseblockextra")
-        description = _text(desc_node) if desc_node else ""
-        description = re.split(r"\s+Offered by\b", description)[0].strip()
+        raw_description = _text(desc_node) if desc_node else ""
+        parts = re.split(r"\s+Offered by\b", raw_description, maxsplit=1)
+        description = parts[0].strip()
+        extra_notes = [parts[1].strip()] if len(parts) > 1 else []
+        extra_notes.extend(_text(n) for n in block.select(".courseblockextra") if n is not desc_node)
+        notes = " ".join(n for n in extra_notes if n)
 
         prereq_node = block.select_one("p.prereq")
         prereqs = ""
@@ -133,6 +139,7 @@ def parse_catalog(page, dept="CS"):
                 "credits": re.sub(r"\s+", "", credits.group(1)) if credits else "",
                 "description": description,
                 "prereqs": prereqs,
+                "specialTopics": is_special_topics_course(title, description, notes),
             }
         )
     return courses

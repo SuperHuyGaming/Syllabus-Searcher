@@ -20,6 +20,12 @@ from urllib.parse import unquote
 from . import rules, sources
 from .parse import Row, Term
 from .text import extract_text
+from .topics import (
+    extract_raw_text,
+    extract_topic_from_listing,
+    extract_topic_from_text,
+    is_special_topics_course,
+)
 
 log = logging.getLogger("scraper")
 
@@ -40,8 +46,25 @@ def dept_of(code):
     return re.match(r"(?:[a-z]+:)?[A-Z]+", code).group(0).rsplit(":", 1)[-1]
 
 
-def keeps_all(codes, keep_all=KEEP_ALL):
-    return any(dept_of(code) in keep_all for code in codes)
+def keeps_all(codes, keep_all=KEEP_ALL, special_topics=None):
+    if any(dept_of(code) in keep_all for code in codes):
+        return True
+    if special_topics is None:
+        return False
+    if callable(special_topics):
+        return any(special_topics(code) for code in codes)
+    return any(code in special_topics for code in codes)
+
+
+def is_special_topics_item(item, special_topics=None):
+    row = item.row if hasattr(item, "row") else item
+    if is_special_topics_course(getattr(row, "title", "")):
+        return True
+    if special_topics is None:
+        return False
+    if callable(special_topics):
+        return any(special_topics(code) for code in row.codes)
+    return any(code in special_topics for code in row.codes)
 
 
 def source_url(href):
@@ -78,23 +101,28 @@ def dedupe(items):
     return list(by_url.values())
 
 
-def choose(items, keep_all=KEEP_ALL):
+def choose(items, keep_all=KEEP_ALL, special_topics=None):
     """The files worth downloading, in listing order."""
     chosen = dedupe(items)
     newest = {}
     for item in chosen:
-        if keeps_all(item.row.codes, keep_all):
+        if keeps_all(item.row.codes, keep_all, special_topics) or is_special_topics_item(item, special_topics):
             continue
         code = item.row.codes[0]
         if code not in newest or item.row.term.key > newest[code].row.term.key:
             newest[code] = item
     keep = {id(item) for item in newest.values()}
-    return [item for item in chosen if keeps_all(item.row.codes, keep_all) or id(item) in keep]
+    return [
+        item for item in chosen
+        if keeps_all(item.row.codes, keep_all, special_topics)
+        or is_special_topics_item(item, special_topics)
+        or id(item) in keep
+    ]
 
 
-def text_doc(row, codes, text):
+def text_doc(row, codes, text, topic=None):
     """The search document for one file (read by api/src/repos/search.js)."""
-    return {
+    doc = {
         "codes": sorted(set(codes)),
         "title": row.title,
         "termKey": row.term.key,
@@ -104,14 +132,19 @@ def text_doc(row, codes, text):
         "source": row.source,
         "text": text,
     }
+    if topic:
+        doc["topic"] = topic
+        if topic.lower() not in (text or "").lower():
+            doc["text"] = f"{topic}\n{text}".strip() if text else topic
+    return doc
 
 
-def backups(items, keep_all=KEEP_ALL):
-    """Outside KEEP_ALL: course code -> its other listed files, newest first, to try when the
-    newest one can't be used (a Word file, or a dead link)."""
+def backups(items, keep_all=KEEP_ALL, special_topics=None):
+    """Outside KEEP_ALL and special-topics courses: course code -> its other listed files, newest first,
+    to try when the newest one can't be used (a Word file, or a dead link)."""
     by_code = {}
     for item in dedupe(items):
-        if not keeps_all(item.row.codes, keep_all):
+        if not (keeps_all(item.row.codes, keep_all, special_topics) or is_special_topics_item(item, special_topics)):
             by_code.setdefault(item.row.codes[0], []).append(item)
     for listed_items in by_code.values():
         listed_items.sort(key=lambda item: item.row.term.key, reverse=True)
@@ -134,7 +167,7 @@ def remove_older(store, code, term):
         log.info("Replaced %s %s with a newer syllabus", code, offering["termLabel"])
 
 
-def save_one(store, fetcher, item, keep_all=KEEP_ALL, link_only=False):
+def save_one(store, fetcher, item, keep_all=KEEP_ALL, link_only=False, special_topics=None):
     """Returns "saved", "exists", "skipped" (a newer one is saved), "unusable" (missing or not a
     PDF or web page) or "full"."""
     row = item.row
@@ -143,7 +176,10 @@ def save_one(store, fetcher, item, keep_all=KEEP_ALL, link_only=False):
         return "exists"
     if store.file_for(url):
         return "exists"
-    keep_one = not keeps_all(row.codes, keep_all)
+    if special_topics is None:
+        special_topics = getattr(store, "is_special_topics", None)
+    is_topics = is_special_topics_item(item, special_topics)
+    keep_one = not (keeps_all(row.codes, keep_all, special_topics) or is_topics)
     if keep_one and has_newer(store, row.codes[0], row.term):
         return "skipped"
 
@@ -165,13 +201,24 @@ def save_one(store, fetcher, item, keep_all=KEEP_ALL, link_only=False):
     # Only now, so a dead or unusable newer link never costs the course the copy it has.
     if keep_one:
         remove_older(store, row.codes[0], row.term)
-    if not row.title:
-        row.title = store.course_title(row.codes[0]) or re.sub(r"^([A-Z]+)", r"\1 ", row.codes[0])
-    for code in row.codes:
-        store.save_offering(dept_of(code), code, row, file_id, content_type, url)
-
     text = extract_text(data, content_type)
-    store.save_text(file_id, text_doc(row, row.codes, text))
+    catalog_title = store.course_title(row.codes[0])
+    listing_title = row.title
+    if not row.title:
+        row.title = catalog_title or re.sub(r"^([A-Z]+)", r"\1 ", row.codes[0])
+    topic = ""
+    if is_topics:
+        topic = extract_topic_from_listing(listing_title, catalog_title=catalog_title or "", codes=row.codes)
+        if not topic:
+            raw_text = extract_raw_text(data, content_type) or text
+            topic = extract_topic_from_text(raw_text, codes=row.codes, catalog_title=catalog_title or "")
+    for code in row.codes:
+        if topic:
+            store.save_offering(dept_of(code), code, row, file_id, content_type, url, topic=topic)
+        else:
+            store.save_offering(dept_of(code), code, row, file_id, content_type, url)
+
+    store.save_text(file_id, text_doc(row, row.codes, text, topic=topic))
     summary = rules.summarize(text)
     if summary:
         store.save_summary(file_id, summary, rules.PROVIDER)
@@ -180,17 +227,19 @@ def save_one(store, fetcher, item, keep_all=KEEP_ALL, link_only=False):
     return "saved"
 
 
-def save_all(store, fetcher, items, limit=0, keep_all=KEEP_ALL, link_only=False):
+def save_all(store, fetcher, items, limit=0, keep_all=KEEP_ALL, link_only=False, special_topics=None):
     """Downloads every chosen file not saved yet. Returns counts by result."""
+    if special_topics is None:
+        special_topics = getattr(store, "is_special_topics", None)
     counts = {"saved": 0, "exists": 0, "skipped": 0}
-    others = backups(items, keep_all)
-    for item in choose(items, keep_all):
-        result = save_one(store, fetcher, item, keep_all, link_only=link_only)
+    others = backups(items, keep_all, special_topics=special_topics)
+    for item in choose(items, keep_all, special_topics=special_topics):
+        result = save_one(store, fetcher, item, keep_all, link_only=link_only, special_topics=special_topics)
         # Newest per course: when its file can't be used, the next newest one stands in.
         for backup in others.get(item.row.codes[0], []) if result == "unusable" else []:
             if backup is item or backup.row.term.key > item.row.term.key:
                 continue
-            result = save_one(store, fetcher, backup, keep_all, link_only=link_only)
+            result = save_one(store, fetcher, backup, keep_all, link_only=link_only, special_topics=special_topics)
             if result != "unusable":
                 break
         if result == "unusable":
