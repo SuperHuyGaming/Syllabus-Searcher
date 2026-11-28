@@ -222,13 +222,73 @@ def test_select_targets_orders_by_dept_size_and_respects_90_day_cooldown():
         ],
     }
     state = [
-        {"_id": "gmu:CS 112", "school": "gmu", "code": "CS 112", "lastSearched": now - timedelta(days=30)},
-        {"_id": "gmu:CS 310", "school": "gmu", "code": "CS 310", "lastSearched": now - timedelta(days=91)},
+        {"_id": "gmu:CS 112", "school": "gmu", "code": "CS 112", "lastSearched": now - timedelta(days=30), "ok": True},
+        {"_id": "gmu:CS 310", "school": "gmu", "code": "CS 310", "lastSearched": now - timedelta(days=91), "ok": True},
+        # Written by a run whose API calls all failed (no "ok"): not a real search, so no cooldown.
+        {"_id": "gmu:CS 321", "school": "gmu", "code": "CS 321", "lastSearched": now - timedelta(days=1)},
     ]
     store = FakeStore(coverage_doc=cov, search_state=state)
     targets = search.select_targets(store.db, school="gmu", now=now)
     # CS (60 courses) before HIST (20 courses); CS 112 skipped (<90d), CS 310 included (>90d), catalog order
     assert targets == ["CS 310", "CS 321", "HIST 100"]
+
+
+class ErrorSession(FakeSession):
+    """Custom Search answers every query with the given status and Google-style error body."""
+
+    def __init__(self, status, message="API key not valid. Please pass a valid API key.", reason="badRequest"):
+        super().__init__()
+        self.status = status
+        self.body = {"error": {"code": status, "message": message, "errors": [{"reason": reason}]}}
+
+    def get(self, url, params=None, timeout=30):
+        if url == search.CUSTOM_SEARCH_URL:
+            self.search_calls.append(dict(params))
+            return FakeResponse(self.status, json_data=self.body)
+        return super().get(url, params=params, timeout=timeout)
+
+
+def _three_missing_cs():
+    return {
+        "_id": "gmu",
+        "school": "gmu",
+        "totals": {"courses": 3, "withSyllabi": 0, "withoutSyllabi": 3},
+        "departments": [
+            {"dept": "CS", "courses": 3, "withSyllabi": 0, "withoutSyllabi": 3, "missingCourses": ["CS 101", "CS 102", "CS 103"]},
+        ],
+    }
+
+
+def test_google_search_error_carries_googles_message():
+    with pytest.raises(search.SearchError) as exc:
+        search.google_search(ErrorSession(400), "q", api_key="k", cx="c")
+    assert exc.value.status == 400 and exc.value.fatal
+    assert "API key not valid" in str(exc.value) and "badRequest" in str(exc.value)
+
+    with pytest.raises(search.SearchError) as exc:
+        search.google_search(ErrorSession(503, message="Backend Error", reason="backendError"), "q", api_key="k", cx="c")
+    assert not exc.value.fatal
+
+
+def test_refused_api_stops_run_without_cooldown(caplog):
+    store = FakeStore(coverage_doc=_three_missing_cs())
+    session = ErrorSession(400)
+    with caplog.at_level("WARNING"):
+        counts = search.run_search(store, budget=20, api_key="k", cx="c", session=session, sleep=lambda _: None)
+    # One refused query is enough: the rest of the budget is kept and no course is put on cooldown.
+    assert counts["queries"] == 1 and counts["errors"] == 1 and counts["searched"] == 0
+    assert len(session.search_calls) == 1
+    assert store.db["search_state"].docs == []
+    assert "API key not valid" in caplog.text
+
+
+def test_transient_api_error_skips_course_without_cooldown():
+    store = FakeStore(coverage_doc=_three_missing_cs())
+    session = ErrorSession(503, message="Backend Error", reason="backendError")
+    counts = search.run_search(store, budget=20, api_key="k", cx="c", session=session, sleep=lambda _: None)
+    # Both queries of every course are tried, none is marked searched.
+    assert counts["queries"] == 6 and counts["errors"] == 6 and counts["searched"] == 0
+    assert store.db["search_state"].docs == []
 
 
 def test_verify_syllabus_handles_html_pdf_docx_and_rejects_invalid(monkeypatch):
