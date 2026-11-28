@@ -30,6 +30,14 @@ function binary(buffer, contentType, headers = {}) {
   };
 }
 
+function redirect(location, headers = {}) {
+  return {
+    statusCode: 302,
+    headers: { Location: location, ...headers },
+    body: '',
+  };
+}
+
 function header(event, name) {
   return (event.headers || {})[name.toLowerCase()];
 }
@@ -64,4 +72,4 @@ function clientIp(event, proxySecret = '') {
   return event.requestContext?.http?.sourceIp || 'unknown';
 }
 
-module.exports = { HttpError, json, xml, binary, header, bodyBuffer, bodyJson, clientIp };
+module.exports = { HttpError, json, xml, binary, redirect, header, bodyBuffer, bodyJson, clientIp };

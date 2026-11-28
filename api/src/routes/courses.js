@@ -1,5 +1,6 @@
 const config = require('../config');
-const { json, xml, binary, HttpError } = require('../lib/http');
+const { json, xml, binary, redirect, HttpError } = require('../lib/http');
+const { isAllowedLink } = require('../repos/files');
 const { normalizeCourse, displayCourse, schoolOf, deptOf, deptKey, withoutSchool, DEFAULT_SCHOOL } = require('../lib/terms');
 const { mergeCourses, mergeCourse } = require('../lib/courselist');
 const { groupByProfessor } = require('../lib/professors');
@@ -13,6 +14,8 @@ const CATALOG_CACHE = { 'Cache-Control': 'public, max-age=0, s-maxage=60' };
 const SITEMAP_CACHE = { 'Cache-Control': 'public, max-age=0, s-maxage=3600' };
 // File ids never get reused, so a syllabus file can be cached forever.
 const FILE_CACHE = { 'Cache-Control': 'public, max-age=31536000, immutable' };
+// Link-only redirects use a short cache so removals or link changes take effect quickly.
+const LINK_CACHE = { 'Cache-Control': 'public, max-age=300' };
 // Scraped HTML syllabi are untrusted: sandbox them so their scripts can't run on our domain.
 const HTML_SANDBOX = {
   'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src * data:",
@@ -98,7 +101,15 @@ module.exports = ({ catalog, departments, files, search }) => {
         if (!course && !official) {
           throw new HttpError(404, `${displayCourse(code)} isn't in the ${await departments.schoolName(schoolOf(code))} catalog`);
         }
-        return json(200, { ...mergeCourse(course, official), school: schoolOf(code), dept: deptOf(code) }, CATALOG_CACHE);
+        const merged = mergeCourse(course, official);
+        const linked =
+          merged.offerings?.length && files?.linkedIds
+            ? await files.linkedIds(merged.offerings.map((o) => o.fileId))
+            : new Set();
+        const offerings = linked.size
+          ? merged.offerings.map((o) => (linked.has(o.fileId) ? { ...o, linked: true } : o))
+          : merged.offerings;
+        return json(200, { ...merged, offerings, school: schoolOf(code), dept: deptOf(code) }, CATALOG_CACHE);
       },
     },
     {
@@ -142,6 +153,10 @@ module.exports = ({ catalog, departments, files, search }) => {
       async handler({ params }) {
         const file = await files.read('syllabi', params[0]);
         if (!file) throw new HttpError(404, 'Syllabus not found');
+        if (file.link) {
+          if (!isAllowedLink(file.link)) throw new HttpError(404, 'Syllabus not found');
+          return redirect(file.link, LINK_CACHE);
+        }
         const extra = file.contentType.startsWith('text/html') ? HTML_SANDBOX : {};
         return binary(file.buffer, file.contentType, {
           ...FILE_CACHE,

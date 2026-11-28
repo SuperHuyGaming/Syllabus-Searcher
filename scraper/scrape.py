@@ -43,6 +43,8 @@ LISTING_SOURCES = {
 }
 # Sources that keep what they read from historical pages that no longer change in the database.
 CACHED_SOURCES = {"cehd", "chss", "masonkorea"}
+# Sources whose files stay on their public host; only a link (plus text and summary) is stored.
+LINK_ONLY_SOURCES = {"chss", "masonkorea"}
 
 log = logging.getLogger("scraper")
 
@@ -216,7 +218,7 @@ def main(argv=None):
                              "; ".join(row.instructors), row.href)
                 continue
             # All of them, not just the chosen ones: older files stand in when the newest can't be used.
-            result = listings.save_all(store, fetcher, items, limit=args.limit)
+            result = listings.save_all(store, fetcher, items, limit=args.limit, link_only=name in LINK_ONLY_SOURCES)
             log.info("%s: %d new files, %d already saved, %d skipped%s", name, result["saved"], result["exists"],
                      result["skipped"], " (storage full)" if result.get("full") else "")
 

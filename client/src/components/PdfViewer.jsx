@@ -1,15 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, FormControlLabel, Stack, Switch, Typography } from '@mui/material';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { AnnotationMode, PDFWorker, getDocument } from 'pdfjs-dist';
+import { syllabusUrl } from '../api';
 import { pageText } from '../lib/pdftext';
 
 // pdf.js parses in a worker. Vite bundles it as a plain .js file, so S3 and nginx
 // serve it with a JavaScript type (they don't all know .mjs). One worker serves every
 // file and is handed to each getDocument call: a loading task only shuts down a worker
 // it made itself, so closing the viewer can't break the next file opened right after.
-const worker = new PDFWorker({
-  port: new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), { type: 'module' }),
-});
+// Created lazily so linked-only previews (and unit tests) never spin up a worker.
+let sharedWorker = null;
+function getWorker() {
+  if (!sharedWorker) {
+    sharedWorker = new PDFWorker({
+      port: new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), { type: 'module' }),
+    });
+  }
+  return sharedWorker;
+}
 
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
@@ -17,7 +26,10 @@ const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 // to the OS or a desktop reader. pdf.js doesn't run a PDF's JavaScript, and links,
 // form fields and other annotations are left out, so the page is only a picture.
 // `data` is the file as an ArrayBuffer. Loaded lazily, since pdf.js is large.
-export default function PdfViewer({ data }) {
+// For link-only syllabi (`linked` is true), falls back to opening the link directly
+// instead of fetching bytes across origins.
+export default function PdfViewer({ data, linked = false, fileId, href }) {
+  const externalUrl = href || (fileId ? syllabusUrl(fileId) : '');
   const canvasRef = useRef(null);
   const [pdf, setPdf] = useState(null);
   const [error, setError] = useState(null);
@@ -28,9 +40,10 @@ export default function PdfViewer({ data }) {
 
   // The dialog mounts a new viewer for each file, so state starts fresh per file.
   useEffect(() => {
+    if (linked || !data) return undefined;
     // pdf.js moves the bytes to its worker, so pass a copy and keep `data` usable.
     let closed = false;
-    const task = getDocument({ data: new Uint8Array(data.slice(0)), worker });
+    const task = getDocument({ data: new Uint8Array(data.slice(0)), worker: getWorker() });
     task.promise.then(
       (doc) => !closed && setPdf(doc),
       (err) => !closed && setError(err.message)
@@ -39,7 +52,7 @@ export default function PdfViewer({ data }) {
       closed = true;
       task.destroy();
     };
-  }, [data]);
+  }, [data, linked]);
 
   useEffect(() => {
     if (!pdf) return undefined;
@@ -72,6 +85,28 @@ export default function PdfViewer({ data }) {
       render?.cancel();
     };
   }, [pdf, pageNum, zoom]);
+
+  if (linked) {
+    return (
+      <Stack spacing={2} sx={{ alignItems: 'flex-start', p: 1 }}>
+        <Alert severity="info">
+          This syllabus is hosted on an external site, so it can&apos;t be previewed inline. Open it in a new tab to
+          view it.
+        </Alert>
+        {externalUrl && (
+          <Button
+            variant="contained"
+            href={externalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            endIcon={<OpenInNewIcon />}
+          >
+            Open syllabus
+          </Button>
+        )}
+      </Stack>
+    );
+  }
 
   if (error) return <Alert severity="error">Could not show this PDF: {error}</Alert>;
 

@@ -40,7 +40,8 @@ class FakeStore:
     def __init__(self, offerings=None, full=False):
         self.offerings = offerings or {}
         self.full = full
-        self.files, self.saved, self.texts, self.summaries, self.removed = {}, [], {}, {}, []
+        self.files, self.linked, self.saved_files = {}, {}, {}
+        self.saved, self.texts, self.summaries, self.removed = [], {}, {}, []
 
     def is_curated(self, url):
         return url.endswith("curated.pdf")
@@ -55,13 +56,24 @@ class FakeStore:
         self.removed.append(offering)
 
     def content_type(self, data, url):
-        return "application/pdf" if data.startswith(b"%PDF-") else None
+        if data.startswith(b"%PDF-"):
+            return "application/pdf"
+        if data.lstrip().lower().startswith((b"<!doctype html", b"<html")):
+            return "text/html; charset=utf-8"
+        return None
 
     def save_file(self, data, url, content_type):
         if self.full:
             return None
         file_id = f"{len(self.files):024x}"
         self.files[url] = (file_id, content_type)
+        self.saved_files[url] = (file_id, len(data))
+        return file_id
+
+    def link_file(self, url, content_type, length=0, filename=None):
+        file_id = f"{len(self.files):024x}"
+        self.files[url] = (file_id, content_type)
+        self.linked[url] = (file_id, content_type, length)
         return file_id
 
     def course_title(self, code):
@@ -169,3 +181,57 @@ def test_save_all_falls_back_to_the_next_newest_file(monkeypatch):
     calls.clear()
     bad = [listed("GGS301", FALL, href="https://x.edu/a.docx"), listed("GGS301", SPRING, href="https://x.edu/b.docx")]
     assert listings.save_all(FakeStore(), None, bad) == {"saved": 0, "exists": 0, "skipped": 1}
+
+
+def test_save_one_link_only_links_without_saving_bytes_and_ignores_full_storage(monkeypatch):
+    calls = fake_fetch(monkeypatch)
+    url = "https://d101vc9winf8ln.cloudfront.net/syllabuses/115992/original/HIST121.pdf"
+    older = {"PK": "COURSE#HIST121", "SK": "TERM#2020-1#SEC#001#a", "termKey": SPRING.key, "termLabel": "Spring 2020",
+             "source": "gmu-chss", "sourceUrl": "https://d101vc9winf8ln.cloudfront.net/syllabuses/1/original/old.pdf",
+             "code": "HIST121", "fileId": "a"}
+    store = FakeStore({"HIST121": [older]}, full=True)
+    item = listed("HIST121", FALL, href=url)
+
+    assert listings.save_one(store, None, item, link_only=True) == "saved"
+    assert calls == [(url, None)]
+    assert store.saved_files == {}
+    assert url in store.linked
+    file_id, content_type, length = store.linked[url]
+    assert content_type == "application/pdf" and length == len(PDF)
+    assert store.removed == [older]
+    assert store.saved == [("HIST", "HIST121", "HIST 121", file_id, url)]
+    assert store.texts[file_id]["codes"] == ["HIST121"]
+    assert store.summaries[file_id][0] == "rules"
+
+    # Re-run finds the linked file via file_for and does not re-download.
+    assert listings.save_one(store, None, item, link_only=True) == "exists"
+    assert len(calls) == 1
+
+
+def test_save_one_link_only_still_validates_type_size_and_mentions_course(monkeypatch):
+    store = FakeStore(full=True)
+    fake_fetch(monkeypatch, data=b"PK\x03\x04 a docx")
+    assert listings.save_one(store, None, listed("HIST121", FALL), link_only=True) == "unusable"
+
+    fake_fetch(monkeypatch, data=b"%PDF-" + b"x" * listings.MAX_FILE_BYTES)
+    assert listings.save_one(store, None, listed("HIST121", FALL), link_only=True) == "unusable"
+
+    fake_fetch(monkeypatch, data=b"<html><body>Department home page</body></html>")
+    assert listings.save_one(store, None, listed("HIST121", FALL), link_only=True) == "unusable"
+    assert store.linked == {} and store.saved == []
+
+
+def test_save_all_link_only_passes_flag_to_primary_and_backup(monkeypatch):
+    def fetch(fetcher, href, timestamp=None):
+        return (b"PK   a docx" if href.endswith(".docx") else PDF), None
+
+    monkeypatch.setattr(listings.sources, "fetch_file", fetch)
+    monkeypatch.setattr(listings, "extract_text", lambda data, ct: data.decode("latin-1"))
+    newest = listed("HIST121", FALL, href="https://d101vc9winf8ln.cloudfront.net/syllabuses/2/original/a.docx")
+    backup = listed("HIST121", SPRING, href="https://d101vc9winf8ln.cloudfront.net/syllabuses/1/original/b.pdf")
+    store = FakeStore(full=True)
+
+    counts = listings.save_all(store, None, [backup, newest], link_only=True)
+    assert counts == {"saved": 1, "exists": 0, "skipped": 0}
+    assert store.saved_files == {}
+    assert "https://d101vc9winf8ln.cloudfront.net/syllabuses/1/original/b.pdf" in store.linked

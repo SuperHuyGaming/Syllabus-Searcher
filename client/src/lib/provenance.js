@@ -58,6 +58,7 @@ export function provenanceOf(offering) {
   const host = sourceHost(url);
   const known = KNOWN_SOURCES[baseSource] || null;
   const isUpload = baseSource === 'upload';
+  const isLinked = Boolean(offering?.linked);
   const isArchive = baseSource === 'archive' || archiveUrl || Boolean(known?.archived);
 
   let origin = '';
@@ -69,9 +70,13 @@ export function provenanceOf(offering) {
   } else if (known) {
     // CHSS and Mason Korea store files on a CloudFront CDN; show the college domain instead of the CDN host.
     const displayHost = host && !CDN_HOST.test(host) ? host : known.host;
-    origin = known.archived || archiveUrl ? `from ${displayHost} (Internet Archive)` : `from ${displayHost}`;
+    if (known.archived || archiveUrl) {
+      origin = `from ${displayHost} (Internet Archive)`;
+    } else {
+      origin = `${isLinked ? 'linked from' : 'from'} ${displayHost}`;
+    }
   } else if (host) {
-    origin = `from ${host}`;
+    origin = `${isLinked ? 'linked from' : 'from'} ${host}`;
   }
 
   return {
@@ -79,12 +84,14 @@ export function provenanceOf(offering) {
     origin,
     host: host || known?.host || '',
     isUpload,
+    isLinked,
     isArchive,
     isFilenameInferred,
   };
 }
 
 // One-line provenance label for a syllabus card, e.g.:
+//   "Fall 2025 · linked from historyarthistory.gmu.edu"
 //   "Fall 2025 · from historyarthistory.gmu.edu"
 //   "Fall 2024 · from cs.gmu.edu (Internet Archive)"
 //   "Student upload · approved Mar 2026"
