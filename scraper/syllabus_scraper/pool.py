@@ -21,6 +21,7 @@ import io
 import logging
 import os
 import re
+from datetime import datetime, timezone
 
 import gridfs
 import requests
@@ -146,7 +147,10 @@ class SupabaseMember:
         self._bucket_ready = True
 
     def db_bytes(self):
-        total = list(self.index.aggregate([{"$group": {"_id": None, "bytes": {"$sum": "$length"}}}]))
+        total = list(self.index.aggregate([
+            {"$match": {"link": {"$exists": False}}},
+            {"$group": {"_id": None, "bytes": {"$sum": "$length"}}},
+        ]))
         return total[0]["bytes"] if total else 0
 
     cluster_bytes = db_bytes  # each site has its own Supabase project
@@ -169,7 +173,7 @@ class SupabaseMember:
 
     def open(self, file_id):
         doc = self.index.find_one({"_id": ObjectId(file_id)})
-        if not doc:
+        if not doc or doc.get("link"):
             return None
         res = self.session.get(self._object(file_id), timeout=120)
         if res.status_code != 200:
@@ -178,18 +182,29 @@ class SupabaseMember:
         return Stored(res.content, doc.get("metadata"))
 
     def delete(self, file_id):
-        if not self.index.find_one({"_id": ObjectId(file_id)}, {"_id": 1}):
+        doc = self.index.find_one({"_id": ObjectId(file_id)}, {"_id": 1, "link": 1})
+        if not doc:
             return False
-        self.session.delete(self._object(file_id), timeout=30)
+        if not doc.get("link"):
+            self.session.delete(self._object(file_id), timeout=30)
         self.index.delete_one({"_id": ObjectId(file_id)})
         return True
 
 
 class Pool:
-    def __init__(self, members, cap=None, budget=None):
+    def __init__(self, members, cap=None, budget=None, stored_files=None):
         self.members = members
         # The main Atlas cluster: search text, catalogs and uploads live there.
         self.main = next(m for m in members if not isinstance(m, SupabaseMember))
+        self._supabase = next((m for m in members if isinstance(m, SupabaseMember)), None)
+        if stored_files is not None:
+            self.stored_files = stored_files
+        elif self._supabase is not None:
+            self.stored_files = self._supabase.index
+        elif hasattr(self.main, "db") and self.main.db is not None:
+            self.stored_files = self.main.db["stored_files"]
+        else:
+            self.stored_files = None
         if cap is not None:  # one cap for every member (tests)
             for member in members:
                 member.cap = cap
@@ -238,16 +253,41 @@ class Pool:
                 return file_id
         return None
 
+    def link(self, source_url, filename, metadata, length=0, file_id=None):
+        """Records a link-only file in the main database's stored_files collection without saving
+        any bytes. Never counts toward storage caps or budgets and never returns None."""
+        if self.stored_files is None:
+            raise RuntimeError("Pool has no stored_files collection for link-only records")
+        file_id = ObjectId(file_id) if file_id else ObjectId()
+        self.stored_files.replace_one(
+            {"_id": file_id},
+            {
+                "_id": file_id,
+                "filename": filename,
+                "length": length,
+                "metadata": metadata,
+                "link": source_url,
+                "uploadDate": datetime.now(timezone.utc),
+            },
+            upsert=True,
+        )
+        return str(file_id)
+
     def find(self, query, projection=None):
         """The first stored file record matching a query (GridFS files shape), from anywhere."""
         for member in self.members:
             doc = member.find(query, projection)
             if doc:
                 return doc
+        if self._supabase is None and self.stored_files is not None:
+            return self.stored_files.find_one(query, projection)
         return None
 
     def find_all(self, query, projection=None):
-        return [doc for member in self.members for doc in member.find_all(query, projection)]
+        docs = [doc for member in self.members for doc in member.find_all(query, projection)]
+        if self._supabase is None and self.stored_files is not None:
+            docs.extend(self.stored_files.find(query, projection))
+        return docs
 
     def open(self, file_id):
         """A readable file (.read(), .metadata) from wherever it is, or None."""
@@ -258,7 +298,13 @@ class Pool:
         return None
 
     def delete(self, file_id):
-        return any(member.delete(file_id) for member in self.members)
+        if any(member.delete(file_id) for member in self.members):
+            return True
+        if self._supabase is None and self.stored_files is not None:
+            if self.stored_files.find_one({"_id": ObjectId(file_id)}, {"_id": 1}):
+                self.stored_files.delete_one({"_id": ObjectId(file_id)})
+                return True
+        return False
 
     def move_to_supabase(self, limit_mb=None):
         """Moves files from the Atlas clusters to Supabase Storage, keeping their ids, to free the

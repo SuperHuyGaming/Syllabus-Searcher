@@ -83,6 +83,16 @@ class Store:
         filename = source_url.rsplit("/", 1)[-1]
         return self.pool.save(data, filename, {"contentType": content_type, "sourceUrl": source_url})
 
+    def link_file(self, source_url, content_type, length=0, filename=None):
+        """Records a link-only file (no bytes saved) and returns its new file id."""
+        filename = filename or source_url.rsplit("/", 1)[-1]
+        return self.pool.link(
+            source_url,
+            filename,
+            {"contentType": content_type, "sourceUrl": source_url},
+            length=length,
+        )
+
     def content_type(self, data, url):
         return detect_content_type(data, url)
 
@@ -330,7 +340,10 @@ class Store:
                 if copy:
                     pdf_id = str(copy["_id"])
                 else:
-                    pdf = maker.html_to_pdf(self.pool.open(html_id).read())
+                    stream = self.pool.open(html_id)
+                    if stream is None:
+                        continue
+                    pdf = maker.html_to_pdf(stream.read())
                     if not pdf:
                         continue
                     name = html_file["filename"].rsplit(".", 1)[0] + ".pdf"

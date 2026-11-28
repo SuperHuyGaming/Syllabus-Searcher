@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from bson import ObjectId
 
 from syllabus_scraper import pool as pool_module
@@ -32,6 +34,19 @@ class FakeMember:
         file_id = str(file_id or ObjectId())
         self.files[file_id] = (filename, data, metadata)
         return file_id
+
+    def find(self, query, projection=None):
+        return next(
+            (d for d in self.find_all({}, projection) if all(self._get(d, k) == v for k, v in query.items())),
+            None,
+        )
+
+    @staticmethod
+    def _get(doc, path):
+        current = doc
+        for part in path.split("."):
+            current = (current or {}).get(part)
+        return current
 
     def find_all(self, query, projection=None):
         return [{"_id": i, "filename": f, "length": len(d), "metadata": m} for i, (f, d, m) in self.files.items()]
@@ -135,7 +150,14 @@ class FakeIndex:
         self.docs.pop(query["_id"], None)
 
     def aggregate(self, pipeline):
-        return [{"bytes": sum(d["length"] for d in self.docs.values())}] if self.docs else []
+        docs = list(self.docs.values())
+        for stage in pipeline:
+            if "$match" in stage:
+                for key, cond in stage["$match"].items():
+                    if isinstance(cond, dict) and "$exists" in cond:
+                        want = cond["$exists"]
+                        docs = [d for d in docs if (key in d) is want]
+        return [{"bytes": sum(d["length"] for d in docs)}] if docs else []
 
 
 def supabase(cap_mb=950):
@@ -183,3 +205,59 @@ def test_move_files_from_atlas_to_supabase_keeps_ids():
     assert Pool([supabase(), main2]).move_to_supabase(limit_mb=1.5)[0] == 2
     # Nothing to move to without Supabase.
     assert Pool([FakeMember("1", 1, 1)]).move_to_supabase() == (0, 0)
+
+
+def test_link_only_stores_no_bytes_and_ignores_storage_caps():
+    store, main = supabase(cap_mb=0), FakeMember("1", 470, 470)
+    pool = Pool([store, main], budget=0)
+    url = "https://d101vc9winf8ln.cloudfront.net/syllabuses/115992/original/HIST121.pdf"
+
+    # Regular save fails when storage is full, but link() always succeeds.
+    assert pool.save(b"%PDF-1", "a.pdf", {"contentType": "application/pdf"}) is None
+    file_id = pool.link(url, "HIST121.pdf", {"contentType": "application/pdf", "sourceUrl": url}, length=123456)
+    assert ObjectId.is_valid(file_id)
+    assert store.session.objects == {} and main.files == {}
+
+    doc = store.index.docs[ObjectId(file_id)]
+    assert doc["filename"] == "HIST121.pdf"
+    assert doc["length"] == 123456
+    assert doc["metadata"] == {"contentType": "application/pdf", "sourceUrl": url}
+    assert doc["link"] == url
+    assert isinstance(doc["uploadDate"], datetime) and doc["uploadDate"].tzinfo == timezone.utc
+
+    # Linked records do not count toward Supabase storage usage.
+    assert store.db_bytes() == 0
+    assert pool.find({"metadata.sourceUrl": url})["_id"] == ObjectId(file_id)
+    assert len(pool.find_all({"metadata.sourceUrl": url})) == 1
+
+    # Opening a linked record returns None without calling Supabase Storage.
+    def fail_get(*args, **kwargs):
+        raise AssertionError("should not fetch linked file from Supabase")
+
+    store.session.get = fail_get
+    assert pool.open(file_id) is None
+
+    # Deleting a linked record removes the index doc without calling Supabase Storage delete.
+    def fail_delete(*args, **kwargs):
+        raise AssertionError("should not delete linked file from Supabase")
+
+    store.session.delete = fail_delete
+    assert pool.delete(file_id) is True
+    assert store.index.docs == {}
+
+
+def test_link_only_works_without_supabase_member():
+    index = FakeIndex()
+    main = FakeMember("1", 470, 470)
+    pool = Pool([main], cap=470 * MB, budget=0, stored_files=index)
+    url = "https://d101vc9winf8ln.cloudfront.net/syllabuses/118302/original/AE040.pdf"
+
+    file_id = pool.link(url, "AE040.pdf", {"contentType": "application/pdf", "sourceUrl": url}, length=9876)
+    assert ObjectId.is_valid(file_id)
+    assert main.files == {}
+    assert pool.find({"metadata.sourceUrl": url})["_id"] == ObjectId(file_id)
+    assert len(pool.find_all({"metadata.sourceUrl": url})) == 1
+    assert pool.open(file_id) is None
+    assert pool.delete(file_id) is True
+    assert pool.find({"metadata.sourceUrl": url}) is None
+    assert pool.delete(file_id) is False
