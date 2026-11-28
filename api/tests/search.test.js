@@ -1,4 +1,4 @@
-const { snippet, terms, schoolFilter } = require('../src/repos/search');
+const { createSearch, snippet, terms, schoolFilter } = require('../src/repos/search');
 
 describe('search helpers', () => {
   test('terms keep phrases and drop negations and tiny words', () => {
@@ -38,5 +38,76 @@ describe('search per school', () => {
 
   test('other schools match their prefix', () => {
     expect(schoolFilter('unc')).toEqual({ codes: { $regex: '^unc:' } });
+  });
+});
+
+describe('special-topics in search', () => {
+  test('search returns topic on matching syllabus results', async () => {
+    const col = {
+      find: jest.fn(() => ({
+        sort: () => ({
+          limit: () => ({
+            toArray: async () => [
+              {
+                _id: 'f1',
+                codes: ['CS399'],
+                title: 'Special Topics in Computer Science',
+                topic: 'AI, Technology & Society',
+                termKey: '2026-3',
+                termLabel: 'Fall 2026',
+                section: '001',
+                instructors: ['Ada Lovelace'],
+                text: 'Exploring AI, Technology & Society in modern computing.',
+                score: 3.14159,
+              },
+            ],
+          }),
+        }),
+      })),
+    };
+    const search = createSearch({ db: { collection: () => col } });
+    const results = await search.search('AI Technology', 'gmu');
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      fileId: 'f1',
+      codes: ['CS399'],
+      topic: 'AI, Technology & Society',
+      termLabel: 'Fall 2026',
+    });
+  });
+
+  test('refresh keeps topic when present and unsets it when absent', async () => {
+    const col = { updateOne: jest.fn().mockResolvedValue(), deleteOne: jest.fn().mockResolvedValue() };
+    const search = createSearch({ db: { collection: () => col } });
+    await search.refresh('f1', [
+      {
+        code: 'CS399',
+        title: 'Special Topics',
+        topic: 'AI, Technology & Society',
+        termKey: '2026-3',
+        termLabel: 'Fall 2026',
+        section: '001',
+        instructors: ['Ada'],
+      },
+    ]);
+    expect(col.updateOne).toHaveBeenCalledWith(
+      { _id: 'f1' },
+      { $set: expect.objectContaining({ topic: 'AI, Technology & Society' }) }
+    );
+
+    await search.refresh('f2', [
+      {
+        code: 'CS310',
+        title: 'Data Structures',
+        termKey: '2026-3',
+        termLabel: 'Fall 2026',
+        section: '001',
+        instructors: ['Ada'],
+      },
+    ]);
+    expect(col.updateOne).toHaveBeenCalledWith(
+      { _id: 'f2' },
+      { $set: expect.not.objectContaining({ topic: expect.anything() }), $unset: { topic: '' } }
+    );
   });
 });

@@ -21,7 +21,8 @@ const HTML_SANDBOX = {
   'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src * data:",
 };
 
-module.exports = ({ catalog, departments, files, search }) => {
+module.exports = ({ catalog, departments, files, search, coverage }) => {
+  const hintsRepo = coverage || departments;
   // ?school=unc picks a school; GMU when it's left out, so old links keep working.
   async function schoolParam(query) {
     const school = String(query.school || DEFAULT_SCHOOL).toLowerCase();
@@ -97,7 +98,11 @@ module.exports = ({ catalog, departments, files, search }) => {
       async handler({ params }) {
         const code = normalizeCourse(decodeURIComponent(params[0]));
         if (!code) throw new HttpError(400, 'Course code should look like "CS 310"');
-        const [course, official] = await Promise.all([catalog.getCourse(code), departments.course(code)]);
+        const [course, official, hasOnlineHint] = await Promise.all([
+          catalog.getCourse(code),
+          departments.course(code),
+          hintsRepo?.hasOnlineHint ? hintsRepo.hasOnlineHint(code) : false,
+        ]);
         if (!course && !official) {
           throw new HttpError(404, `${displayCourse(code)} isn't in the ${await departments.schoolName(schoolOf(code))} catalog`);
         }
@@ -109,7 +114,11 @@ module.exports = ({ catalog, departments, files, search }) => {
         const offerings = linked.size
           ? merged.offerings.map((o) => (linked.has(o.fileId) ? { ...o, linked: true } : o))
           : merged.offerings;
-        return json(200, { ...merged, offerings, school: schoolOf(code), dept: deptOf(code) }, CATALOG_CACHE);
+        return json(
+          200,
+          { ...merged, offerings, hasOnlineHint: Boolean(hasOnlineHint), school: schoolOf(code), dept: deptOf(code) },
+          CATALOG_CACHE
+        );
       },
     },
     {

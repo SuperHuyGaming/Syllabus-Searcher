@@ -76,7 +76,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
     const items = await readAll(ScanCommand, {
       FilterExpression: 'begins_with(SK, :term)',
       ExpressionAttributeValues: { ':term': 'TERM#' },
-      ProjectionExpression: 'code, title, termKey, termLabel, #section, instructors, fileId, pdfFileId, #source',
+      ProjectionExpression: 'code, title, topic, termKey, termLabel, #section, instructors, fileId, pdfFileId, #source',
       ExpressionAttributeNames: { '#section': 'section', '#source': 'source' },
     });
     return items.map((item) => ({ ...item, display: displayCourse(item.code) }));
@@ -155,13 +155,14 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
       const offerings = items
         .filter((item) => item.SK.startsWith('TERM#'))
         .map(
-          ({ SK, termKey, termLabel, section, instructors, title, fileId, pdfFileId, contentType, source, sourceUrl, createdAt }) => ({
+          ({ SK, termKey, termLabel, section, instructors, title, topic, fileId, pdfFileId, contentType, source, sourceUrl, createdAt }) => ({
             id: SK,
             termKey,
             termLabel,
             section,
             instructors,
             title,
+            ...(topic && { topic }),
             fileId,
             // HTML syllabi get a PDF copy from the scraper (scraper/syllabus_scraper/pdf.py).
             pdfFileId,
@@ -221,7 +222,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
     // Writes the course entries and the offering. Course entries are updated, not replaced,
     // so catalog details survive; an existing title (the catalog's) is kept.
     // Returns { firstSyllabus: true } if the course had no syllabi before.
-    async putOffering({ dept, code, title, term, section, instructors, fileId, contentType, source, sourceUrl }) {
+    async putOffering({ dept, code, title, topic, term, section, instructors, fileId, contentType, source, sourceUrl }) {
       clearOfferings();
       const now = new Date().toISOString();
       const firstSyllabus = await touchCourse({ dept, code, title, keepTitle: true });
@@ -233,6 +234,7 @@ function createCatalog({ client, tableName = config.tableName } = {}) {
             SK: `TERM#${term.key}#SEC#${section}#${fileId}`,
             code,
             title,
+            ...(topic && { topic }),
             termKey: term.key,
             termLabel: term.label,
             section,

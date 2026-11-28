@@ -84,6 +84,41 @@ describe('summaries in the catalog', () => {
     expect(course.rollup).toEqual(expect.objectContaining({ rollup: { overview: 'Usually trees.' }, provider: 'Gemini', fileIds: ['a', 'b'] }));
     expect(course.rollup).not.toHaveProperty('PK');
   });
+
+  test('a course includes topic on special-topics offerings and omits it when absent', async () => {
+    const client = fakeClient((name) => {
+      if (name === 'QueryCommand') {
+        return {
+          Items: [
+            { SK: 'META', title: 'Special Topics in Computer Science' },
+            {
+              SK: 'TERM#2026-3#SEC#001#a',
+              termKey: '2026-3',
+              termLabel: 'Fall 2026',
+              section: '001',
+              instructors: ['Ada'],
+              topic: 'AI, Technology & Society',
+              fileId: 'a',
+              source: 'gmu-cs',
+            },
+            {
+              SK: 'TERM#2025-3#SEC#002#b',
+              termKey: '2025-3',
+              termLabel: 'Fall 2025',
+              section: '002',
+              instructors: ['Bo'],
+              fileId: 'b',
+              source: 'gmu-cs',
+            },
+          ],
+        };
+      }
+      return { Responses: { T: [] } };
+    });
+    const course = await createCatalog({ client, tableName: 'T' }).getCourse('CS399');
+    expect(course.offerings[0].topic).toBe('AI, Technology & Society');
+    expect(course.offerings[1]).not.toHaveProperty('topic');
+  });
 });
 
 describe('last updated status', () => {

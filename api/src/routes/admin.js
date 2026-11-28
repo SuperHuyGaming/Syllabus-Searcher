@@ -31,11 +31,13 @@ module.exports = ({
   files,
   uploads,
   search,
+  coverage,
   checkUpload = aiCheck,
   readText = fileText,
   summarize = aiSummarize,
   scrape = createScrapeTrigger(),
 }) => {
+  const coverageRepo = coverage || departments;
   async function requireAdmin(event) {
     const token = (header(event, 'authorization') || '').replace(/^Bearer\s+/i, '');
     if (!token) throw new HttpError(401, 'Sign in first');
@@ -351,6 +353,20 @@ module.exports = ({
         }
         await refreshSearch(old.fileId);
         return json(200, { deleted: true, fileDeleted: remaining.length === 0 }, NO_STORE);
+      },
+    },
+    {
+      // Coverage report and online syllabus hints (Studocu, Course Hero, etc.) for one school.
+      method: 'GET',
+      path: /^\/api\/admin\/coverage$/,
+      async handler({ event, query }) {
+        await requireAdmin(event);
+        const school = String(query.school || 'gmu').toLowerCase();
+        const [report, hints] = await Promise.all([
+          coverageRepo?.getCoverage ? coverageRepo.getCoverage(school) : null,
+          coverageRepo?.listHints ? coverageRepo.listHints(school) : [],
+        ]);
+        return json(200, { school, coverage: report, hints }, NO_STORE);
       },
     },
     {
