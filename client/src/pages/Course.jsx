@@ -27,7 +27,7 @@ import SyllabusButtons from '../components/SyllabusButtons';
 import SyllabusSummary from '../components/SyllabusSummary';
 import { hasRollup, hasSummary } from '../lib/summary';
 import { groupByTerm, instructorsOf } from '../lib/terms';
-import { DEFAULT_SCHOOL, deptOf, deptPath, displayCourse, schoolOf, withoutSchool } from '../lib/courses';
+import { DEFAULT_SCHOOL, deptOf, deptPath, displayCourse, formatOfferingLabel, schoolOf, withoutSchool } from '../lib/courses';
 import { useSchool } from '../components/School';
 import { professorPath, professorSlug } from '../lib/professors';
 import { provenanceLabel } from '../lib/provenance';
@@ -90,7 +90,7 @@ export default function Course() {
       {offerings.length === 0 ? (
         <Stack spacing={2}>
           <Alert severity="info">No syllabi for {course.display} yet.</Alert>
-          <UploadPrompt code={code} first />
+          <UploadPrompt code={code} first hasOnlineHint={Boolean(course.hasOnlineHint)} />
         </Stack>
       ) : (
         <CourseSyllabi
@@ -243,6 +243,11 @@ function OfferingCard({ offering: o, courseCode, courseDisplay }) {
     <Card variant="outlined">
       <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', '&:last-child': { pb: 2 } }}>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          {o.topic?.trim() && (
+            <Typography variant="subtitle2" color="primary" sx={{ fontWeight: 700, mb: 0.25 }}>
+              {formatOfferingLabel(courseDisplay, o.termLabel, o.topic)}
+            </Typography>
+          )}
           <Typography sx={{ fontWeight: 600 }}>
             {o.instructors.map((name, i) => {
               const rmpUrl = PLACEHOLDER.test(name) ? null : rateMyProfessorsUrl(name, school.key);
@@ -321,7 +326,7 @@ function OfferingCard({ offering: o, courseCode, courseDisplay }) {
   );
 }
 
-function UploadPrompt({ code, first }) {
+function UploadPrompt({ code, first, hasOnlineHint }) {
   return (
     <Alert
       severity="success"
@@ -335,6 +340,11 @@ function UploadPrompt({ code, first }) {
       {first
         ? 'Took this course? Upload its syllabus so other students can see it.'
         : 'Have a syllabus for this course that’s missing here? Share it.'}
+      {first && hasOnlineHint && (
+        <Typography variant="body2" sx={{ mt: 0.5, fontWeight: 600 }}>
+          A syllabus for this course was spotted online. Took it? Upload it.
+        </Typography>
+      )}
     </Alert>
   );
 }

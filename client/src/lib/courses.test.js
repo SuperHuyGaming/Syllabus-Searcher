@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { deptKey, deptOf, deptOfText, deptPath, displayCourse, normalizeCourse, schoolOf, withoutSchool } from './courses';
+import { deptKey, deptOf, deptOfText, deptPath, displayCourse, formatOfferingLabel, normalizeCourse, schoolOf, withoutSchool } from './courses';
 
 describe('normalizeCourse', () => {
   test('accepts spaced, dashed and lowercase codes', () => {
@@ -59,5 +59,19 @@ describe('schools', () => {
   test('department links keep the school in the address', () => {
     expect(deptPath('CS')).toBe('/?dept=CS');
     expect(deptPath('unc:COMP')).toBe('/?school=unc&dept=COMP');
+  });
+});
+
+describe('formatOfferingLabel', () => {
+  test('formats course, term and topic with middle dots when topic is non-empty', () => {
+    expect(formatOfferingLabel('CS 399', 'Fall 2026', 'AI, Technology & Society')).toBe(
+      'CS 399 · Fall 2026 · AI, Technology & Society'
+    );
+  });
+
+  test('omits the topic segment when topic is missing or blank', () => {
+    expect(formatOfferingLabel('CS 399', 'Fall 2026', '')).toBe('CS 399 · Fall 2026');
+    expect(formatOfferingLabel('CS 399', 'Fall 2026', '   ')).toBe('CS 399 · Fall 2026');
+    expect(formatOfferingLabel('CS 399', 'Fall 2026', undefined)).toBe('CS 399 · Fall 2026');
   });
 });
