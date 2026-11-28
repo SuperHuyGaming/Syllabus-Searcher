@@ -8,6 +8,8 @@
     python scrape.py --catalog-only --departments CS,MATH   # just these departments
     python scrape.py --catalog-only --schools unc --dry-run # count one school's courses, write nothing
     python scrape.py --sources math --no-catalog --limit 50 # only Math syllabi, at most 50 new files
+    python scrape.py --coverage --school gmu               # compute coverage report from MongoDB
+    python scrape.py --sources search --search-budget 95 --no-catalog  # discover uncovered GMU syllabi via Google Search
 
 CS syllabi (--sources cs), two passes:
   1. Listing pages (live or archived): course, section, title and instructor come from the table.
@@ -25,7 +27,7 @@ from urllib.parse import unquote, urlsplit
 
 from dotenv import load_dotenv
 
-from syllabus_scraper import cehd, chss, cos, listings, math, sources
+from syllabus_scraper import cehd, chss, cos, coverage, listings, math, search, sources
 from syllabus_scraper.catalog import fetch_catalog, fetch_departments
 from syllabus_scraper.schools import SCHOOLS
 from syllabus_scraper.parse import current_term, parse_filename, parse_index, parse_term, terms_between
@@ -151,12 +153,31 @@ def main(argv=None):
     parser.add_argument("--no-catalog", action="store_true", help="Skip loading the course list from catalog.gmu.edu")
     parser.add_argument("--departments", default="", help='Only load these catalog departments, e.g. "CS,MATH"')
     parser.add_argument("--schools", default="", help='Only load these catalogs, e.g. "gmu,unc" (syllabus_scraper/schools.py)')
+    parser.add_argument("--school", default="gmu", help='School slug for --coverage and --sources search (default: "gmu")')
+    parser.add_argument("--coverage", action="store_true", help="Compute syllabus coverage from MongoDB and print summary")
+    parser.add_argument(
+        "--search-budget",
+        type=int,
+        default=search.DEFAULT_DAILY_BUDGET,
+        help=f"Daily Google Custom Search query budget (default: {search.DEFAULT_DAILY_BUDGET}, max: {search.MAX_DAILY_BUDGET})",
+    )
     parser.add_argument("--reindex", action="store_true", help="Re-extract text for every file, not just new ones")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logging.getLogger("pypdf").setLevel(logging.ERROR)  # it warns about every slightly malformed PDF
     load_dotenv()
+    try:
+        search.validate_budget(args.search_budget)
+    except ValueError as err:
+        parser.error(f"--search-budget: {err}")
+
+    if args.coverage:
+        cov_store = Store()
+        doc = coverage.run_coverage(cov_store.db, school=args.school, write=not args.dry_run)
+        print(coverage.format_summary(doc))
+        return 0
+
     since = parse_term(args.since)
     if not since:
         parser.error('--since should look like "Fall 2022"')
@@ -256,9 +277,9 @@ def main(argv=None):
         return 0
 
     wanted_sources = [s.strip().lower() for s in args.sources.split(",") if s.strip()]
-    unknown = set(wanted_sources) - {"cs", *LISTING_SOURCES}
+    unknown = set(wanted_sources) - {"cs", "search", *LISTING_SOURCES}
     if unknown:
-        parser.error(f"unknown --sources {', '.join(sorted(unknown))}; choose from cs, {', '.join(LISTING_SOURCES)}")
+        parser.error(f"unknown --sources {', '.join(sorted(unknown))}; choose from cs, search, {', '.join(LISTING_SOURCES)}")
     if store and args.move_files is not None:
         moved, size = store.pool.move_to_supabase(args.move_files or None)
         log.info("Moved %d files (%.1f MB) from Atlas to Supabase Storage", moved, size / (1024 * 1024))
@@ -270,6 +291,26 @@ def main(argv=None):
             run()
             log.info("Done: %d rows, %d new files, %d skipped", counts["rows"], counts["saved"], counts["skipped"])
         run_listings()
+        if "search" in wanted_sources:
+            result = search.run_search(
+                store,
+                school=args.school,
+                budget=args.search_budget,
+                limit=args.limit,
+                delay=args.delay,
+                dry_run=args.dry_run,
+            )
+            log.info(
+                "search: %d courses searched, %d queries, %d saved (%d linked, %d copied), %d hints, %d skipped%s",
+                result["searched"],
+                result["queries"],
+                result["saved"],
+                result["linked"],
+                result["copied"],
+                result["hints"],
+                result["skipped"],
+                " (storage full)" if result.get("full") else "",
+            )
     if store and not args.no_catalog:
         load_catalog()
     if store:
