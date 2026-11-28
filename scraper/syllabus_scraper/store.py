@@ -20,6 +20,7 @@ from .pdf import PdfMaker
 from .pool import Pool
 from .schools import DEFAULT_SCHOOL, school_code
 from .text import extract_text
+from .topics import is_special_topics_course
 
 log = logging.getLogger("scraper")
 
@@ -45,6 +46,7 @@ class Store:
         )
         self.table = dynamo.Table(os.environ.get("TABLE_NAME", "SyllabusSearcher"))
         self._curated = None
+        self._special_topics = None
 
     def is_curated(self, source_url):
         """True if an admin edited or deleted this file on the site; the scraper must not undo that."""
@@ -77,6 +79,20 @@ class Store:
             return item["title"]
         course = self.db["courses"].find_one({"_id": code}, {"title": 1})
         return course["title"] if course else None
+
+    def is_special_topics(self, code):
+        """True if the catalog flags this course as a special-topics course."""
+        if self._special_topics is None:
+            self._special_topics = set()
+            for doc in self.db["courses"].find(
+                {},
+                {"title": 1, "description": 1, "notes": 1, "specialTopics": 1},
+            ):
+                if doc.get("specialTopics") or is_special_topics_course(
+                    doc.get("title", ""), doc.get("description", ""), doc.get("notes", "")
+                ):
+                    self._special_topics.add(doc["_id"])
+        return code in self._special_topics
 
     def save_file(self, data, source_url, content_type):
         """Returns the new file's id, or None when every storage cluster is full."""
@@ -152,26 +168,28 @@ class Store:
             ExpressionAttributeValues={":code": code, ":title": title, ":now": now},
         )
 
-    def save_offering(self, dept, code, row, file_id, content_type, source_url):
+    def save_offering(self, dept, code, row, file_id, content_type, source_url, topic=None):
         now = datetime.now(timezone.utc).isoformat()
         self._touch_course(dept, code, row.title, now)
-        self.table.put_item(
-            Item={
-                "PK": f"COURSE#{code}",
-                "SK": f"TERM#{row.term.key}#SEC#{row.section}#{file_id}",
-                "code": code,
-                "title": row.title,
-                "termKey": row.term.key,
-                "termLabel": row.term.label,
-                "section": row.section,
-                "instructors": row.instructors,
-                "fileId": file_id,
-                "contentType": content_type,
-                "source": row.source,
-                "sourceUrl": source_url,
-                "createdAt": now,
-            }
-        )
+        topic = (topic if topic is not None else getattr(row, "topic", None)) or ""
+        item = {
+            "PK": f"COURSE#{code}",
+            "SK": f"TERM#{row.term.key}#SEC#{row.section}#{file_id}",
+            "code": code,
+            "title": row.title,
+            "termKey": row.term.key,
+            "termLabel": row.term.label,
+            "section": row.section,
+            "instructors": row.instructors,
+            "fileId": file_id,
+            "contentType": content_type,
+            "source": row.source,
+            "sourceUrl": source_url,
+            "createdAt": now,
+        }
+        if topic:
+            item["topic"] = topic
+        self.table.put_item(Item=item)
 
     def mark_scraped(self):
         """Records when a full scrape finished, for "Last updated" on the site.
@@ -207,8 +225,19 @@ class Store:
         writes = [
             UpdateOne(
                 {"_id": code},
-                {"$set": {"school": school, "dept": dept, "title": c["title"], "credits": c["credits"],
-                          "description": c["description"], "prereqs": c["prereqs"], "updatedAt": now}},
+                {"$set": {
+                    "school": school,
+                    "dept": dept,
+                    "title": c["title"],
+                    "credits": c["credits"],
+                    "description": c["description"],
+                    "prereqs": c["prereqs"],
+                    "specialTopics": bool(c.get(
+                        "specialTopics",
+                        is_special_topics_course(c["title"], c.get("description", ""), c.get("notes", "")),
+                    )),
+                    "updatedAt": now,
+                }},
                 upsert=True,
             )
             for code, c in zip(codes, courses)
@@ -216,6 +245,7 @@ class Store:
         if writes:
             catalog.bulk_write(writes, ordered=False)
         catalog.delete_many({"dept": dept, "_id": {"$nin": codes}})
+        self._special_topics = None
         self.db["departments"].update_one(
             {"_id": dept},
             {"$set": {"school": school, "name": department["name"], "courses": len(courses), "updatedAt": now}},
@@ -273,20 +303,22 @@ class Store:
                 continue
             text = extract_text(stream.read(), stream.metadata.get("contentType", ""))
             first = offerings[0]
-            collection.replace_one(
-                {"_id": file_id},
-                {
-                    "codes": sorted({o["code"] for o in offerings}),
-                    "title": first["title"],
-                    "termKey": first["termKey"],
-                    "termLabel": first["termLabel"],
-                    "section": first["section"],
-                    "instructors": list(dict.fromkeys(n for o in offerings for n in o["instructors"])),
-                    "source": first["source"],
-                    "text": text,
-                },
-                upsert=True,
-            )
+            topic = next((o.get("topic") for o in offerings if o.get("topic")), "")
+            doc = {
+                "codes": sorted({o["code"] for o in offerings}),
+                "title": first["title"],
+                "termKey": first["termKey"],
+                "termLabel": first["termLabel"],
+                "section": first["section"],
+                "instructors": list(dict.fromkeys(n for o in offerings for n in o["instructors"])),
+                "source": first["source"],
+                "text": text,
+            }
+            if topic:
+                doc["topic"] = topic
+                if topic.lower() not in (text or "").lower():
+                    doc["text"] = f"{topic}\n{text}".strip() if text else topic
+            collection.replace_one({"_id": file_id}, doc, upsert=True)
             count += 1
             if not text:
                 log.warning("No text in %s (likely a scanned PDF)", file_id)
