@@ -121,3 +121,40 @@ def test_count_syllabi_keeps_schools_apart():
     assert upserts["unc:COMP"]["$set"]["withSyllabi"] == 2
     assert upserts["unc:COMP"]["$setOnInsert"] == {"school": "unc", "name": "COMP", "courses": 0}
     assert upserts["CS"]["$setOnInsert"]["school"] == "gmu"
+
+
+def test_store_link_file_and_file_for_round_trip():
+    from bson import ObjectId
+    from syllabus_scraper.pool import Pool
+    from tests.test_pool import FakeIndex, FakeMember
+
+    index = FakeIndex()
+    store = Store.__new__(Store)
+    store.pool = Pool([FakeMember("1", 470, 470)], budget=0, stored_files=index)
+    url = "https://d101vc9winf8ln.cloudfront.net/syllabuses/115992/original/HIST121.pdf"
+
+    file_id = store.link_file(url, "application/pdf", 54321)
+    assert ObjectId.is_valid(file_id)
+    assert store.file_for(url) == (file_id, "application/pdf")
+    doc = index.docs[ObjectId(file_id)]
+    assert doc["filename"] == "HIST121.pdf" and doc["length"] == 54321 and doc["link"] == url
+
+
+def test_only_chss_and_masonkorea_opt_into_link_only(monkeypatch):
+    fake = FakeStore()
+    seen = []
+
+    monkeypatch.setattr(scrape, "Store", lambda: fake)
+    monkeypatch.setattr(scrape, "load_dotenv", lambda: None)
+    monkeypatch.setitem(scrape.LISTING_SOURCES, "math", lambda fetcher, since, **kw: iter([]))
+    monkeypatch.setitem(scrape.LISTING_SOURCES, "chss", lambda fetcher, since, **kw: iter([]))
+    monkeypatch.setitem(scrape.LISTING_SOURCES, "masonkorea", lambda fetcher, since, **kw: iter([]))
+
+    def fake_save_all(store, fetcher, items, limit=0, link_only=False):
+        seen.append(link_only)
+        return {"saved": 0, "exists": 0, "skipped": 0}
+
+    monkeypatch.setattr(scrape.listings, "save_all", fake_save_all)
+    assert scrape.main(["--no-catalog", "--sources", "math,chss,masonkorea"]) == 0
+    assert seen == [False, True, True]
+    assert scrape.LINK_ONLY_SOURCES == {"chss", "masonkorea"}

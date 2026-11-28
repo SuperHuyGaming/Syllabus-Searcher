@@ -134,7 +134,7 @@ def remove_older(store, code, term):
         log.info("Replaced %s %s with a newer syllabus", code, offering["termLabel"])
 
 
-def save_one(store, fetcher, item, keep_all=KEEP_ALL):
+def save_one(store, fetcher, item, keep_all=KEEP_ALL, link_only=False):
     """Returns "saved", "exists", "skipped" (a newer one is saved), "unusable" (missing or not a
     PDF or web page) or "full"."""
     row = item.row
@@ -156,9 +156,12 @@ def save_one(store, fetcher, item, keep_all=KEEP_ALL):
         log.warning("Skipped %s (a web page that never mentions %s, likely a redirect)", url, ",".join(row.codes))
         return "unusable"
 
-    file_id = store.save_file(data, url, content_type)
-    if not file_id:
-        return "full"
+    if link_only:
+        file_id = store.link_file(url, content_type, len(data))
+    else:
+        file_id = store.save_file(data, url, content_type)
+        if not file_id:
+            return "full"
     # Only now, so a dead or unusable newer link never costs the course the copy it has.
     if keep_one:
         remove_older(store, row.codes[0], row.term)
@@ -177,17 +180,17 @@ def save_one(store, fetcher, item, keep_all=KEEP_ALL):
     return "saved"
 
 
-def save_all(store, fetcher, items, limit=0, keep_all=KEEP_ALL):
+def save_all(store, fetcher, items, limit=0, keep_all=KEEP_ALL, link_only=False):
     """Downloads every chosen file not saved yet. Returns counts by result."""
     counts = {"saved": 0, "exists": 0, "skipped": 0}
     others = backups(items, keep_all)
     for item in choose(items, keep_all):
-        result = save_one(store, fetcher, item, keep_all)
+        result = save_one(store, fetcher, item, keep_all, link_only=link_only)
         # Newest per course: when its file can't be used, the next newest one stands in.
         for backup in others.get(item.row.codes[0], []) if result == "unusable" else []:
             if backup is item or backup.row.term.key > item.row.term.key:
                 continue
-            result = save_one(store, fetcher, backup, keep_all)
+            result = save_one(store, fetcher, backup, keep_all, link_only=link_only)
             if result != "unusable":
                 break
         if result == "unusable":
