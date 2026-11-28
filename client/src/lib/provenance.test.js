@@ -99,6 +99,46 @@ describe('provenanceLabel', () => {
     ).toBe('Fall 2025 · from masonkorea.gmu.edu');
   });
 
+  test('formats linked-only offerings as "linked from <host>"', () => {
+    const hist = {
+      termLabel: 'Fall 2025',
+      source: 'gmu-chss',
+      sourceUrl: 'https://historyarthistory.gmu.edu/media/syllabi/hist100.pdf',
+      linked: true,
+    };
+    expect(provenanceOf(hist).isLinked).toBe(true);
+    expect(provenanceLabel(hist)).toBe('Fall 2025 · linked from historyarthistory.gmu.edu');
+
+    expect(
+      provenanceLabel({
+        termLabel: 'Fall 2025',
+        source: 'gmu-chss',
+        sourceUrl: 'https://d101vc9winf8ln.cloudfront.net/syllabuses/12345/original/syllabus.pdf',
+        linked: true,
+      })
+    ).toBe('Fall 2025 · linked from chss.gmu.edu');
+
+    expect(
+      provenanceLabel({
+        termLabel: 'Spring 2026',
+        source: 'gmu-masonkorea',
+        sourceUrl: 'https://d101vc9winf8ln.cloudfront.net/syllabuses/67890/original/syllabus.pdf',
+        linked: true,
+      })
+    ).toBe('Spring 2026 · linked from masonkorea.gmu.edu');
+
+    expect(
+      provenanceLabel({
+        termLabel: 'Fall 2025',
+        source: 'gmu-other',
+        sourceUrl: 'https://historyarthistory.gmu.edu/syllabi/hist100.pdf',
+        linked: true,
+      })
+    ).toBe('Fall 2025 · linked from historyarthistory.gmu.edu');
+
+    expect(provenanceOf({ termLabel: 'Fall 2025', source: 'gmu-chss' }).isLinked).toBe(false);
+  });
+
   test('formats CS, CEHD, Math, Science/COS, and Internet Archive sources', () => {
     expect(provenanceLabel({ termLabel: 'Spring 2025', source: 'gmu-cs' })).toBe(
       'Spring 2025 · from cs.gmu.edu (Internet Archive)'

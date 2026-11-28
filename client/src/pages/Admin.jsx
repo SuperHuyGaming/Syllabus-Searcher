@@ -731,6 +731,8 @@ const SOURCES = {
   'gmu-math-filename': 'Scraped (Math, from file name)',
   'gmu-cos': 'Scraped (College of Science)',
   'gmu-cehd': 'Scraped (CEHD)',
+  'gmu-chss': 'Scraped (CHSS)',
+  'gmu-masonkorea': 'Scraped (Mason Korea)',
 };
 
 function OfferingRow({ code, offering, token }) {
@@ -777,6 +779,7 @@ function OfferingRow({ code, offering, token }) {
           <Typography sx={{ fontWeight: 700 }}>{offering.instructors.join('; ')}</Typography>
           <Chip size="small" label={`Section ${offering.section}`} />
           <Chip size="small" variant="outlined" label={SOURCES[offering.source] || offering.source} />
+          {offering.linked && <Chip size="small" variant="outlined" label="Linked" />}
           <Link href={syllabusUrl(offering.fileId)} target="_blank" rel="noopener" variant="body2">
             View syllabus
           </Link>
