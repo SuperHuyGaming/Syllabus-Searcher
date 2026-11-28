@@ -10,7 +10,7 @@
 // Uses SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, MONGODB_URI, MONGODB_DB and
 // CLAMAV_HOST / CLAMAV_PORT. Locally: docker compose run --rm api node scripts/virus-scan.js
 const { createUploads } = require('../src/repos/uploads');
-const { createFiles } = require('../src/repos/files');
+const { createFiles, readFileBuffer } = require('../src/repos/files');
 const { scanBuffer, ping } = require('../src/lib/virusscan');
 
 const DONE = new Set(['clean', 'infected']);
@@ -50,11 +50,13 @@ async function main() {
   for (const upload of todo) {
     const label = `${upload.course_code} ${upload.term_key} sec ${upload.section} (${upload.id})`;
     const file = await files.read('pending', upload.file_id);
-    if (!file || file.link || !file.buffer) {
-      console.log(`- ${label}: ${file?.link ? 'linked file' : 'file missing'}, skipped`);
+    const buffer = await readFileBuffer(file);
+    if (!file || !buffer) {
+      const reason = file?.storage === 'r2' ? 'R2 file unavailable' : file?.link ? 'linked file' : 'file missing';
+      console.log(`- ${label}: ${reason}, skipped`);
       continue;
     }
-    const virusScan = await scanBuffer(file.buffer);
+    const virusScan = await scanBuffer(buffer);
     // saveDetected only touches uploads that are still pending.
     await uploads.saveDetected(upload.id, { ...upload.detected, virusScan });
     if (virusScan.status === 'infected') infected += 1;
