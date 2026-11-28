@@ -11,6 +11,7 @@ const { fileText } = require('./text');
 async function summarizeFile({ catalog, files, fileId, readText = fileText, summarize = aiSummarize, timeoutMs }) {
   const file = await files.read('syllabi', fileId);
   if (!file) return { unavailable: 'The syllabus file is missing.' };
+  if (file.link || !file.buffer) return { unavailable: 'Linked syllabi are not stored here and cannot be summarized.' };
 
   let text = '';
   try {

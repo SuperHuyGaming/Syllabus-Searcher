@@ -33,9 +33,31 @@ function toObjectId(id) {
   return ObjectId.isValid(id) ? new ObjectId(id) : null;
 }
 
+// Hosts that link-only syllabi may redirect to. Anything else is refused with 404.
+function isAllowedLink(raw) {
+  if (typeof raw !== 'string' || !raw || raw !== raw.trim()) return false;
+  for (let i = 0; i < raw.length; i += 1) {
+    const code = raw.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) return false;
+  }
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
+  const host = url.hostname.toLowerCase();
+  return (
+    host === 'd101vc9winf8ln.cloudfront.net' ||
+    host === 'gmu.edu' ||
+    /^[a-z0-9-]+(\.[a-z0-9-]+)*\.gmu\.edu$/.test(host)
+  );
+}
+
 const gridFsBucket = (db, name) => new GridFSBucket(db, { bucketName: name });
 
-// Scraped files in Supabase Storage: the record in "stored_files" and the object itself.
+// Scraped files in Supabase Storage (and link-only records): the record in "stored_files" and the object itself.
 function supabaseStored(database) {
   let client;
   const bucket = () => {
@@ -48,6 +70,12 @@ function supabaseStored(database) {
   const records = async () => (await database()).collection('stored_files');
   return {
     find: async (objectId) => (await records()).findOne({ _id: objectId }),
+    async findLinked(objectIds) {
+      if (objectIds.length === 0) return [];
+      return (await records())
+        .find({ _id: { $in: objectIds }, link: { $type: 'string', $ne: '' } }, { projection: { _id: 1, link: 1 } })
+        .toArray();
+    },
     async download(id) {
       const storage = bucket();
       if (!storage) return null;
@@ -55,9 +83,11 @@ function supabaseStored(database) {
       if (error) throw new Error(`Supabase Storage: ${error.message}`);
       return Buffer.from(await data.arrayBuffer());
     },
-    async remove(objectId) {
-      const storage = bucket();
-      if (storage) await storage.remove([objectId.toHexString()]);
+    async remove(objectId, { linkOnly = false } = {}) {
+      if (!linkOnly) {
+        const storage = bucket();
+        if (storage) await storage.remove([objectId.toHexString()]);
+      }
       await (await records()).deleteOne({ _id: objectId });
     },
   };
@@ -120,7 +150,16 @@ function createFiles({ db, pool, makeBucket = gridFsBucket, stored } = {}) {
         };
       }
       const record = await storedRecord(name, objectId);
-      const buffer = record && (await inSupabase.download(id));
+      if (!record) return null;
+      if (record.link) {
+        return {
+          link: record.link,
+          filename: record.filename,
+          contentType: record.metadata?.contentType || 'application/octet-stream',
+          metadata: record.metadata || {},
+        };
+      }
+      const buffer = await inSupabase.download(id);
       if (!buffer) return null;
       return {
         buffer,
@@ -130,11 +169,24 @@ function createFiles({ db, pool, makeBucket = gridFsBucket, stored } = {}) {
       };
     },
 
+    // Which of these file ids are stored as link-only records (a Set of hex ids).
+    async linkedIds(ids) {
+      const objectIds = [...new Set((ids || []).filter(Boolean))].map(toObjectId).filter(Boolean);
+      if (objectIds.length === 0 || !inSupabase.findLinked) return new Set();
+      try {
+        const docs = await inSupabase.findLinked(objectIds);
+        return new Set(docs.filter((d) => d.link).map((d) => d._id.toHexString()));
+      } catch (err) {
+        console.error('stored_files linked lookup failed', err.message);
+        return new Set();
+      }
+    },
+
     // Approving an upload copies it into the public bucket under the same id.
     // Returns { id, contentType }, or null if the file is gone.
     async move(from, to, id) {
       const file = await this.read(from, id);
-      if (!file) return null;
+      if (!file || !file.buffer) return null;
       await write(to, file.buffer, {
         id: toObjectId(id),
         filename: file.filename,
@@ -157,7 +209,8 @@ function createFiles({ db, pool, makeBucket = gridFsBucket, stored } = {}) {
           if (!/FileNotFound|File not found/i.test(err.message)) throw err;
         }
       }
-      if (await storedRecord(name, objectId)) await inSupabase.remove(objectId);
+      const record = await storedRecord(name, objectId);
+      if (record) await inSupabase.remove(objectId, { linkOnly: Boolean(record.link) });
     },
 
     async ping() {
@@ -166,4 +219,4 @@ function createFiles({ db, pool, makeBucket = gridFsBucket, stored } = {}) {
   };
 }
 
-module.exports = { createFiles, getDb };
+module.exports = { createFiles, getDb, isAllowedLink };

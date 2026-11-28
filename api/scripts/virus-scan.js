@@ -50,8 +50,8 @@ async function main() {
   for (const upload of todo) {
     const label = `${upload.course_code} ${upload.term_key} sec ${upload.section} (${upload.id})`;
     const file = await files.read('pending', upload.file_id);
-    if (!file) {
-      console.log(`- ${label}: file missing, skipped`);
+    if (!file || file.link || !file.buffer) {
+      console.log(`- ${label}: ${file?.link ? 'linked file' : 'file missing'}, skipped`);
       continue;
     }
     const virusScan = await scanBuffer(file.buffer);

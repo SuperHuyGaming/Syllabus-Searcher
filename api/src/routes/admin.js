@@ -113,7 +113,7 @@ module.exports = ({
         await requireAdmin(event);
         const upload = await uploads.get(params[0]);
         const file = upload && (await files.read('pending', upload.file_id));
-        if (!file) throw new HttpError(404, 'File not found');
+        if (!file || !file.buffer) throw new HttpError(404, 'File not found');
         // The admin page draws the file itself, so it is never meant to run as a page:
         // any file type gets the sandbox, and it's shown inline rather than saved.
         return binary(file.buffer, file.contentType, {
@@ -141,7 +141,7 @@ module.exports = ({
           instructor: body.instructor ?? upload.instructor,
         });
         const file = await files.read('pending', upload.file_id);
-        if (!file) throw new HttpError(404, 'The uploaded file is missing');
+        if (!file || !file.buffer) throw new HttpError(404, 'The uploaded file is missing');
         const ai = await aiReview({ catalog, departments, buffer: file.buffer, contentType: file.contentType, details, readText, checkUpload });
         const saved = await uploads.saveDetected(upload.id, { ...upload.detected, ai });
         return json(200, saved || { ...upload, detected: { ...upload.detected, ai } }, NO_STORE);
@@ -225,7 +225,14 @@ module.exports = ({
         if (!code) throw new HttpError(400, 'Course code should look like "CS 310"');
         const course = await catalog.getCourse(code);
         if (!course) throw new HttpError(404, `No syllabi found for ${displayCourse(code)}`);
-        return json(200, course, NO_STORE);
+        const linked =
+          course.offerings?.length && files?.linkedIds
+            ? await files.linkedIds(course.offerings.map((o) => o.fileId))
+            : new Set();
+        const enriched = linked.size
+          ? { ...course, offerings: course.offerings.map((o) => (linked.has(o.fileId) ? { ...o, linked: true } : o)) }
+          : course;
+        return json(200, enriched, NO_STORE);
       },
     },
     {
