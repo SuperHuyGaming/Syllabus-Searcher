@@ -296,7 +296,9 @@ def select_targets(db, school=DEFAULT_SCHOOL, now=None, cooldown_days=SEARCH_COO
         for code in missing:
             display = coverage.display_code(code)
             state = state_col.find_one({"_id": f"{school}:{display}"})
-            if state and state.get("lastSearched") is not None:
+            # Only searches the API answered count; rows without "ok" (from runs whose
+            # API calls all failed) must not hide the course for the cooldown period.
+            if state and state.get("ok") and state.get("lastSearched") is not None:
                 if _as_utc(state["lastSearched"]) > cutoff:
                     continue
             targets.append(display)
@@ -311,6 +313,7 @@ def mark_searched(db, school, code, now=None):
         "school": school,
         "code": display,
         "lastSearched": now,
+        "ok": True,
     }
     db["search_state"].replace_one({"_id": doc["_id"]}, doc, upsert=True)
 
@@ -331,8 +334,40 @@ def save_hint(db, school, code, url, title, snippet, host, now=None):
     db["syllabus_hints"].update_one({"code": display, "url": url}, {"$set": doc}, upsert=True)
 
 
+class SearchError(Exception):
+    """A Custom Search API call that did not return results.
+
+    `fatal` is True when every later query would fail the same way (bad key or engine id,
+    API not enabled, quota used up), so the run stops instead of spending its budget."""
+
+    FATAL_STATUSES = (400, 401, 403, 429)
+
+    def __init__(self, status, message=""):
+        self.status = status
+        self.message = message
+        self.fatal = status in self.FATAL_STATUSES
+        super().__init__(f"{status}: {message}" if message else str(status))
+
+
+def _api_error_message(res):
+    """Google's reason from a failed API response, e.g. 'API key not valid. Please pass a valid API key. (badRequest)'."""
+    try:
+        err = (res.json() or {}).get("error") or {}
+    except (ValueError, AttributeError, TypeError):
+        return ""
+    if not isinstance(err, dict):
+        return str(err)[:300]
+    message = str(err.get("message") or "")
+    reasons = [d.get("reason") for d in err.get("errors") or [] if isinstance(d, dict) and d.get("reason")]
+    if reasons:
+        message = f"{message} ({', '.join(reasons)})" if message else ", ".join(reasons)
+    return message[:300]
+
+
 def google_search(session, query, api_key, cx, num=10):
-    """Executes one Google Custom Search JSON API query and returns its `items` list."""
+    """Executes one Google Custom Search JSON API query and returns its `items` list.
+
+    Raises SearchError when the API does not answer with results."""
     try:
         res = session.get(
             CUSTOM_SEARCH_URL,
@@ -340,18 +375,16 @@ def google_search(session, query, api_key, cx, num=10):
             timeout=30,
         )
     except requests.RequestException as err:
-        log.warning("Google search request failed for %r: %s", query, err.__class__.__name__)
-        return []
-    if res is None or res.status_code != 200:
-        status = getattr(res, "status_code", "no response")
-        log.warning("Google search returned %s for %r", status, query)
-        return []
+        raise SearchError("no response", err.__class__.__name__) from None
+    if res is None:
+        raise SearchError("no response")
+    if res.status_code != 200:
+        raise SearchError(res.status_code, _api_error_message(res))
     try:
         payload = res.json()
     except ValueError:
-        log.warning("Google search returned invalid JSON for %r", query)
-        return []
-    return payload.get("items") or []
+        raise SearchError("invalid JSON") from None
+    return (payload or {}).get("items") or []
 
 
 def _download(session, url, delay, sleep):
@@ -495,6 +528,7 @@ def run_search(
         "hints": 0,
         "skipped": 0,
         "full": False,
+        "errors": 0,
     }
 
     if school != DEFAULT_SCHOOL:
@@ -539,6 +573,7 @@ def run_search(
     targets = select_targets(store.db, school=school, now=now)
     seen_urls = set()
     seen_hashes = set()
+    stop = False
 
     for code in targets:
         if limit and counts["saved"] >= limit:
@@ -552,13 +587,23 @@ def run_search(
         primary_q, fallback_q = build_queries(display)
 
         saved_for_course = 0
+        answered = 0
         for query_idx, query in enumerate((primary_q, fallback_q)):
             if query_idx == 1 and saved_for_course > 0:
                 break
             if not tracker.spend():
                 break
             counts["queries"] += 1
-            items = google_search(session, query, api_key=api_key, cx=cx, num=10)
+            try:
+                items = google_search(session, query, api_key=api_key, cx=cx, num=10)
+            except SearchError as err:
+                counts["errors"] += 1
+                log.warning("Google search returned %s for %r", err, query)
+                if err.fatal:
+                    stop = True
+                    break
+                continue
+            answered += 1
             for item in items:
                 if limit and counts["saved"] >= limit:
                     break
@@ -590,8 +635,16 @@ def run_search(
             if counts["full"] or (limit and counts["saved"] >= limit):
                 break
 
-        mark_searched(store.db, school, display, now=now)
-        counts["searched"] += 1
+        if answered:
+            mark_searched(store.db, school, display, now=now)
+            counts["searched"] += 1
+
+        if stop:
+            log.warning(
+                "search: stopping; the Custom Search API refused the request. Check the "
+                "GOOGLE_SEARCH_API_KEY / GOOGLE_SEARCH_CX secrets and that the API is enabled"
+            )
+            break
 
         if counts["full"]:
             break

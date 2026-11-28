@@ -301,9 +301,10 @@ def main(argv=None):
                 dry_run=args.dry_run,
             )
             log.info(
-                "search: %d courses searched, %d queries, %d saved (%d linked, %d copied), %d hints, %d skipped%s",
+                "search: %d courses searched, %d queries (%d failed), %d saved (%d linked, %d copied), %d hints, %d skipped%s",
                 result["searched"],
                 result["queries"],
+                result.get("errors", 0),
                 result["saved"],
                 result["linked"],
                 result["copied"],
